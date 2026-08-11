@@ -1,0 +1,97 @@
+"""
+hindi_numbers.py
+Converts spoken/written Hindi number words (Devanagari script) into numeric
+amounts. Unlike English, Hindi numbers 1-99 are mostly irregular
+(non-additive) words, so this uses a lookup table for 0-99, then combines
+with multipliers (सौ = hundred, हज़ार = thousand, लाख = lakh).
+
+Handles amounts like:
+    "पांच सौ"           -> 500
+    "एक हज़ार दो सौ"     -> 1200
+    "तीन सौ पचास"       -> 350
+    "बीस"                -> 20
+"""
+
+import re
+
+# 0-99 lookup (most common transliteration spellings included as aliases)
+_UNITS = {
+    "शून्य": 0, "एक": 1, "दो": 2, "तीन": 3, "चार": 4, "पांच": 5, "पाँच": 5,
+    "छह": 6, "छः": 6, "सात": 7, "आठ": 8, "नौ": 9, "दस": 10,
+    "ग्यारह": 11, "बारह": 12, "तेरह": 13, "चौदह": 14, "पंद्रह": 15, "पन्द्रह": 15,
+    "सोलह": 16, "सत्रह": 17, "अठारह": 18, "उन्नीस": 19, "बीस": 20,
+    "इक्कीस": 21, "बाईस": 22, "तेईस": 23, "चौबीस": 24, "पच्चीस": 25,
+    "छब्बीस": 26, "सत्ताईस": 27, "अट्ठाईस": 28, "उनतीस": 29, "तीस": 30,
+    "इकतीस": 31, "बत्तीस": 32, "तैंतीस": 33, "चौंतीस": 34, "पैंतीस": 35,
+    "छत्तीस": 36, "सैंतीस": 37, "अड़तीस": 38, "उनतालीस": 39, "चालीस": 40,
+    "इकतालीस": 41, "बयालीस": 42, "तैंतालीस": 43, "चवालीस": 44, "पैंतालीस": 45,
+    "छियालीस": 46, "सैंतालीस": 47, "अड़तालीस": 48, "उनचास": 49, "पचास": 50,
+    "इक्यावन": 51, "बावन": 52, "तिरेपन": 53, "चौवन": 54, "पचपन": 55,
+    "छप्पन": 56, "सत्तावन": 57, "अट्ठावन": 58, "उनसठ": 59, "साठ": 60,
+    "इकसठ": 61, "बासठ": 62, "तिरेसठ": 63, "चौंसठ": 64, "पैंसठ": 65,
+    "छियासठ": 66, "सरसठ": 67, "अड़सठ": 68, "उनहत्तर": 69, "सत्तर": 70,
+    "इकहत्तर": 71, "बहत्तर": 72, "तिहत्तर": 73, "चौहत्तर": 74, "पचहत्तर": 75,
+    "छिहत्तर": 76, "सतहत्तर": 77, "अठहत्तर": 78, "उन्यासी": 79, "अस्सी": 80,
+    "इक्यासी": 81, "बयासी": 82, "तिरासी": 83, "चौरासी": 84, "पचासी": 85,
+    "छियासी": 86, "सत्तासी": 87, "अट्ठासी": 88, "नवासी": 89, "नब्बे": 90,
+    "इक्यानवे": 91, "बानवे": 92, "तिरानवे": 93, "चौरानवे": 94, "पंचानवे": 95,
+    "छियानवे": 96, "सत्तानवे": 97, "अट्ठानवे": 98, "निन्यानवे": 99,
+}
+
+_MULTIPLIERS = {
+    "सौ": 100,
+    "हज़ार": 1000, "हजार": 1000,
+    "लाख": 100000,
+    "करोड़": 10000000, "करोड": 10000000,
+}
+
+
+def hindi_words_to_number(text: str):
+    """
+    Parse a Hindi phrase for a number and return it as a float, or None
+    if no number words are found. Handles combinations like
+    "एक हज़ार दो सौ पचास" (1250) and "पांच सौ" (500).
+    """
+    tokens = re.findall(r"[\u0900-\u097F]+", text)
+    if not tokens:
+        return None
+
+    total = 0
+    current = 0
+    found_any = False
+
+    for tok in tokens:
+        if tok in _UNITS:
+            current += _UNITS[tok]
+            found_any = True
+        elif tok in _MULTIPLIERS:
+            mult = _MULTIPLIERS[tok]
+            if current == 0:
+                current = 1
+            if mult >= 100:
+                total += current * mult
+            else:
+                current *= mult
+            current = 0 if mult >= 100 else current
+            found_any = True
+        # unrecognized tokens (e.g. "रुपये", "का", "पर") are ignored
+
+    total += current
+    return float(total) if found_any and total > 0 else None
+
+
+def contains_devanagari(text: str) -> bool:
+    """True if the text contains any Devanagari script characters."""
+    return bool(re.search(r"[\u0900-\u097F]", text))
+
+
+if __name__ == "__main__":
+    samples = [
+        "पांच सौ रुपये",
+        "एक हज़ार दो सौ",
+        "तीन सौ पचास का पिज़्ज़ा",
+        "बीस रुपये",
+        "सिर्फ चाय पी",  # no number
+    ]
+    for s in samples:
+        print(s, "->", hindi_words_to_number(s))

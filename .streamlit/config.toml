@@ -1,0 +1,29 @@
+# Goes in .streamlit/config.toml
+
+[theme]
+# MUST be "dark". app.py paints a dark palette via CSS, but Streamlit themes a
+# number of things this stylesheet does not reach: widget label colours, input
+# borders, focus rings, and — importantly — the theme it passes to custom
+# components, which render in their own iframe (the mic recorder's button).
+# With base = "light" those all rendered light-on-dark: labels became unreadable
+# and input borders went white.
+base = "dark"
+
+# Kept in lockstep with the CSS custom properties at the top of app.py.
+# If you change one, change the other:
+#   primaryColor            --accent      #22C55E
+#   backgroundColor         --bg          #0B0E14
+#   secondaryBackgroundColor --surface-2  #171C27
+#   textColor               --text        #E6E9EF
+primaryColor = "#22C55E"
+backgroundColor = "#0B0E14"
+secondaryBackgroundColor = "#171C27"
+textColor = "#E6E9EF"
+font = "monospace"
+
+[server]
+# app.py's uploader label used to claim "Max 5MB", but that text was never
+# enforced and never displayed — Streamlit shows its own server limit, which
+# defaults to 200MB. Setting it here makes the limit real and makes the number
+# the user sees match the number that actually applies.
+maxUploadSize = 5

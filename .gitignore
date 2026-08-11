@@ -1,0 +1,28 @@
+# Rename this file to .gitignore (with the leading dot) in your project root.
+
+# Secrets - never commit these
+.streamlit/secrets.toml
+
+# Downloaded Firebase / Google Cloud service account keys.
+# Google Cloud names them "<project-id>-<keyid>.json", which the older
+# *firebase*key*.json pattern did not catch.
+*firebase*key*.json
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+expense-tracker-*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Local test/backup artifacts
+*.db
+expenses_backup.csv
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/settings.json

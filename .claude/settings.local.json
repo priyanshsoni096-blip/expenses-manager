@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import plotly, pandas, streamlit_mic_recorder; print\\('ok'\\)\")"
+    ]
+  }
+}

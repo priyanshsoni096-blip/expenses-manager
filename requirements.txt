@@ -1,0 +1,11 @@
+# Pinned deliberately. app.py styles Streamlit's internal DOM via
+# data-testid / st-key- selectors, which shift between Streamlit releases —
+# an unpinned upgrade silently breaks the layout. Bump versions on purpose,
+# then re-check the sidebar nav and expense-table rows.
+streamlit==1.41.1
+pandas==2.2.3
+firebase-admin==6.6.0
+toml==0.10.2
+SpeechRecognition==3.11.0
+streamlit-mic-recorder==0.0.8
+plotly==5.24.1
