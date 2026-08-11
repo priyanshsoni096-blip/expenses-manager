@@ -26,3 +26,4 @@ expenses_backup.csv
 .DS_Store
 Thumbs.db
 .vscode/settings.json
+.claude/
