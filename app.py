@@ -154,39 +154,22 @@ CUSTOM_CSS = """
        inherited that narrower width. Percentages, not fixed pixels, so this
        tracks any sidebar width. */
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { max-width: 100% !important; }
-    /* --- Sidebar layout: nav on top, profile FLUSH at the very bottom -------
-       For margin-top:auto to push the profile card to the sidebar's actual
-       bottom EDGE (not just the bottom of the content), the flex column must
-       be as tall as the sidebar itself. height:100% only works if every
-       ancestor also has a resolved height, and Streamlit's sidebar wrappers
-       default to content-height - so height:100% resolved to just the nav's
-       height and the card stopped short, leaving a gap below it (the bug in
-       the screenshot). Fix: force the whole chain (sidebar -> its inner
-       wrappers -> user-content -> first vertical block) to full height, and
-       use min-height:100% on the flex column so it always reaches the bottom.
-       min-height (not height) means it can still GROW past the fold on a tiny
-       window rather than clipping. */
-    section[data-testid="stSidebar"],
-    section[data-testid="stSidebar"] > div,
-    section[data-testid="stSidebar"] > div > div {
+    /* --- Sidebar layout: nav on top, profile pinned toward the bottom -------
+       The user-content region and its first vertical block are a full-height
+       flex column, and the profile card gets margin-top:auto to drop toward
+       the bottom. Only these two specific elements get height/flex - an
+       earlier version also forced height:100% on section>div>div, which
+       collapsed the nav container and made the whole nav DISAPPEAR. Never
+       height the generic sidebar wrapper divs; only the named testids. */
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
         height: 100% !important;
     }
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        height: 100% !important; min-height: 100% !important;
-        display: flex !important; flex-direction: column !important;
-    }
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div[data-testid="stVerticalBlock"] {
-        flex: 1 1 auto !important; min-height: 100% !important;
-        display: flex !important; flex-direction: column !important;
+        height: 100% !important; display: flex !important; flex-direction: column !important;
     }
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div[data-testid="stVerticalBlock"] > .st-key-sidebar_profile {
         margin-top: auto !important;
     }
-    /* The sidebar should not show a horizontal scrollbar. Vertical is left at
-       its default (auto) so that on a genuinely tiny window the profile can
-       still be reached by scrolling rather than being clipped off - clipping
-       the profile entirely is worse than a rare scrollbar. In normal windows
-       the flex column fits without scrolling anyway. */
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { overflow-x: hidden !important; }
     section[data-testid="stSidebar"] [class*="st-key-navrow_"],
     section[data-testid="stSidebar"] [class*="st-key-navrow_"] > div,
@@ -449,21 +432,28 @@ CUSTOM_CSS = """
         margin-bottom: 16px !important;
         box-sizing: border-box !important;
     }
-    /* Inner Streamlit block wrappers size from the COLUMN width, not this
-       card's padded content box, so a full-width child (section-title divider,
-       inputs, the Add Expense button) comes out ~40px too wide and spills past
-       the right border. Fix: target ONLY the card's direct child wrapper - the
-       single block that holds all the card's content - and cap it at 100% of
-       the padded content box with border-box. Constraining just this ONE
-       outer wrapper (not every descendant) means inner elements inherit the
-       correct available width naturally, without the width recalculation that
-       desynced the dividers when the earlier rule hit every wrapper at once. */
-    [class*="st-key-card_"] > div[data-testid="stVerticalBlockBorderWrapper"],
-    .st-key-type_input_box > div[data-testid="stVerticalBlockBorderWrapper"],
-    .st-key-parsed_items_panel > div[data-testid="stVerticalBlockBorderWrapper"],
-    [class*="st-key-card_"] > div[data-testid="stVerticalBlock"],
-    .st-key-type_input_box > div[data-testid="stVerticalBlock"],
-    .st-key-parsed_items_panel > div[data-testid="stVerticalBlock"] {
+    /* Card content overflow - ROOT CAUSE (confirmed via inspect): Streamlit
+       hardcodes a fixed pixel width on the inner wrappers - an HTML width="370"
+       attribute on stElementContainer/stVerticalBlock AND style="width:370px"
+       on stMarkdown. 370px is the COLUMN width, but this card's content box is
+       only 370 - 40 = 330px after its 18px/20px padding, so every 370px child
+       overflows the right border by ~40px. The fix must override that fixed
+       width back to 100% (of the padded content box) on exactly the wrappers
+       Streamlit pins. width:100% + box-sizing wins over the width attribute and
+       the inline style because of !important. Scoped to inside cards so normal
+       column layouts (stat grid, etc.) keep their intended fixed widths. */
+    [class*="st-key-card_"] [data-testid="stElementContainer"],
+    [class*="st-key-card_"] [data-testid="stVerticalBlock"],
+    [class*="st-key-card_"] [data-testid="stMarkdown"],
+    [class*="st-key-card_"] [data-testid="stMarkdownContainer"],
+    .st-key-type_input_box [data-testid="stElementContainer"],
+    .st-key-type_input_box [data-testid="stVerticalBlock"],
+    .st-key-type_input_box [data-testid="stMarkdown"],
+    .st-key-type_input_box [data-testid="stMarkdownContainer"],
+    .st-key-parsed_items_panel [data-testid="stElementContainer"],
+    .st-key-parsed_items_panel [data-testid="stVerticalBlock"],
+    .st-key-parsed_items_panel [data-testid="stMarkdown"],
+    .st-key-parsed_items_panel [data-testid="stMarkdownContainer"] {
         width: 100% !important; max-width: 100% !important; box-sizing: border-box !important;
     }
     /* Cards that sit side by side share a min-height, so the shorter one does
