@@ -154,22 +154,30 @@ CUSTOM_CSS = """
        inherited that narrower width. Percentages, not fixed pixels, so this
        tracks any sidebar width. */
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { max-width: 100% !important; }
-    /* --- Sidebar layout: nav on top, profile pinned to the bottom -----------
-       The sidebar's user-content region and its FIRST vertical block become a
-       full-height flex column. The profile card (last child) then gets
-       margin-top:auto, which soaks up all leftover vertical space and drops it
-       to the bottom. Crucially this uses margin:auto, NOT a forced height on
-       the card or a min-height on the content - so when the window is too
-       short to fit everything, the auto-margin simply collapses to 0 and the
-       card sits right under the nav. It can NEVER push content taller than the
-       sidebar, so the sidebar never needs to scroll. This adapts live on
-       resize with no JS. The ">" limits the flex/auto to the OUTERMOST block
-       so vertical blocks nested inside cards are untouched. */
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+    /* --- Sidebar layout: nav on top, profile FLUSH at the very bottom -------
+       For margin-top:auto to push the profile card to the sidebar's actual
+       bottom EDGE (not just the bottom of the content), the flex column must
+       be as tall as the sidebar itself. height:100% only works if every
+       ancestor also has a resolved height, and Streamlit's sidebar wrappers
+       default to content-height - so height:100% resolved to just the nav's
+       height and the card stopped short, leaving a gap below it (the bug in
+       the screenshot). Fix: force the whole chain (sidebar -> its inner
+       wrappers -> user-content -> first vertical block) to full height, and
+       use min-height:100% on the flex column so it always reaches the bottom.
+       min-height (not height) means it can still GROW past the fold on a tiny
+       window rather than clipping. */
+    section[data-testid="stSidebar"],
+    section[data-testid="stSidebar"] > div,
+    section[data-testid="stSidebar"] > div > div {
         height: 100% !important;
     }
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        height: 100% !important; min-height: 100% !important;
+        display: flex !important; flex-direction: column !important;
+    }
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div[data-testid="stVerticalBlock"] {
-        height: 100% !important; display: flex !important; flex-direction: column !important;
+        flex: 1 1 auto !important; min-height: 100% !important;
+        display: flex !important; flex-direction: column !important;
     }
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div[data-testid="stVerticalBlock"] > .st-key-sidebar_profile {
         margin-top: auto !important;
@@ -440,6 +448,23 @@ CUSTOM_CSS = """
         padding: 18px 20px !important;
         margin-bottom: 16px !important;
         box-sizing: border-box !important;
+    }
+    /* Inner Streamlit block wrappers size from the COLUMN width, not this
+       card's padded content box, so a full-width child (section-title divider,
+       inputs, the Add Expense button) comes out ~40px too wide and spills past
+       the right border. Fix: target ONLY the card's direct child wrapper - the
+       single block that holds all the card's content - and cap it at 100% of
+       the padded content box with border-box. Constraining just this ONE
+       outer wrapper (not every descendant) means inner elements inherit the
+       correct available width naturally, without the width recalculation that
+       desynced the dividers when the earlier rule hit every wrapper at once. */
+    [class*="st-key-card_"] > div[data-testid="stVerticalBlockBorderWrapper"],
+    .st-key-type_input_box > div[data-testid="stVerticalBlockBorderWrapper"],
+    .st-key-parsed_items_panel > div[data-testid="stVerticalBlockBorderWrapper"],
+    [class*="st-key-card_"] > div[data-testid="stVerticalBlock"],
+    .st-key-type_input_box > div[data-testid="stVerticalBlock"],
+    .st-key-parsed_items_panel > div[data-testid="stVerticalBlock"] {
+        width: 100% !important; max-width: 100% !important; box-sizing: border-box !important;
     }
     /* Cards that sit side by side share a min-height, so the shorter one does
        not leave a ragged bottom edge on the row. This replaces the old trick of
