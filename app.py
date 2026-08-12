@@ -25,8 +25,6 @@ st.set_page_config(page_title="Smart Expense Tracker", page_icon="💰", layout=
 
 PAYMENT_MODES = ["Cash", "UPI", "Card", "Other"]
 
-USER_NAME = "Priyansh"
-
 
 def _initials(name: str) -> str:
     """Up to two initials for the sidebar avatar, derived rather than hardcoded
@@ -435,6 +433,19 @@ def get_expenses_df() -> pd.DataFrame:
         return pd.DataFrame(columns=["id", "date", "raw_text", "merchant", "amount", "category", "source", "payment_mode", "account", "notes"])
 
 
+def get_user_name() -> str:
+    """Returns the saved display name for the sidebar/greeting, "" if never
+    set. Cached in session_state - it's read on every single rerun (the
+    sidebar renders on every page), so without caching this would fire a
+    Firestore read on every rerun just to redraw the same name."""
+    if "user_name" not in st.session_state:
+        try:
+            st.session_state.user_name = storage.get_user_name()
+        except Exception:
+            st.session_state.user_name = ""
+    return st.session_state.user_name
+
+
 df = get_expenses_df()
 today = datetime.date.today()
 
@@ -672,19 +683,63 @@ with st.sidebar:
         "    position: static !important; margin-top: 20px !important;"
         "  }"
         "}"
+        # "Edit name" reads as a small text link under the profile card,
+        # not a full button - same visual weight the old static "View
+        # Profile" caption had, since it's standing in for that line.
+        ".st-key-profile_edit_trigger { margin-top: 4px; }"
+        ".st-key-profile_edit_trigger button {"
+        "  background: transparent !important; border: none !important;"
+        "  color: var(--muted) !important; font-size: 10px !important;"
+        "  padding: 0 12px !important; min-height: unset !important;"
+        "  text-decoration: underline; text-decoration-color: transparent;"
+        "}"
+        ".st-key-profile_edit_trigger button:hover { color: var(--accent) !important; text-decoration-color: var(--accent) !important; }"
         "</style>",
         unsafe_allow_html=True,
     )
     with st.container(key="sidebar_profile"):
-        st.markdown(
-            '<div class="sidebar-profile">'
-            f'<div class="sidebar-profile-avatar">{_initials(USER_NAME)}</div>'
-            '<div class="sidebar-profile-text">'
-            f'<div class="sidebar-profile-name" title="{USER_NAME}">{USER_NAME}</div>'
-            '<div class="sidebar-profile-sub">View Profile</div>'
-            "</div></div>",
-            unsafe_allow_html=True,
-        )
+        user_name = get_user_name()
+        editing_name = st.session_state.get("editing_profile_name", False)
+
+        if not user_name and not editing_name:
+            # First run in this Firestore project: nobody's set a name yet.
+            # Same doc a returning user would edit (see below) - this is
+            # just that same flow with nothing to show instead of a name.
+            st.session_state.editing_profile_name = True
+            st.rerun()
+
+        if editing_name:
+            new_name = st.text_input("Your name", value=user_name, key="profile_name_input", placeholder="What should we call you?", label_visibility="collapsed")
+            save_col, cancel_col = st.columns(2)
+            with save_col:
+                if st.button("Save", key="profile_name_save", use_container_width=True) and new_name.strip():
+                    try:
+                        storage.set_user_name(new_name.strip())
+                        st.session_state.user_name = new_name.strip()
+                        st.session_state.editing_profile_name = False
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Couldn't save: {e}")
+            with cancel_col:
+                # Only offer Cancel once a name already exists - on first run
+                # there's nothing to cancel back to.
+                if user_name and st.button("Cancel", key="profile_name_cancel", use_container_width=True):
+                    st.session_state.editing_profile_name = False
+                    st.rerun()
+        else:
+            st.markdown(
+                '<div class="sidebar-profile">'
+                f'<div class="sidebar-profile-avatar">{_initials(user_name)}</div>'
+                '<div class="sidebar-profile-text">'
+                f'<div class="sidebar-profile-name" title="{user_name}">{user_name}</div>'
+                '<div class="sidebar-profile-sub">View Profile</div>'
+                "</div></div>",
+                unsafe_allow_html=True,
+            )
+            with st.container(key="profile_edit_trigger"):
+                if st.button("Edit name", key="profile_name_edit_btn"):
+                    st.session_state.editing_profile_name = True
+                    st.rerun()
 
 page = st.session_state.page
 st.session_state.setdefault("fs_chart", None)
@@ -837,7 +892,8 @@ EXAMPLE_HI = "मैकडॉनल्ड्स में पांच सौ �
 if page == "Dashboard":
     hour = datetime.datetime.now().hour
     greeting = "Good morning" if hour < 12 else ("Good afternoon" if hour < 17 else "Good evening")
-    st.markdown(f'<div class="page-title">{greeting}, {USER_NAME} 👋</div>', unsafe_allow_html=True)
+    user_name = get_user_name() or "there"
+    st.markdown(f'<div class="page-title">{greeting}, {user_name} 👋</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">Here\'s your financial overview</div>', unsafe_allow_html=True)
 
     # Some controls live at the bottom of the page but act on the top of it.

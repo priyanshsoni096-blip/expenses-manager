@@ -237,3 +237,25 @@ def get_budget() -> float:
 def set_budget(amount: float) -> None:
     db = _get_client()
     db.collection(SETTINGS_COLLECTION).document(BUDGET_DOC_ID).set({"amount": float(amount)})
+
+
+# --- Profile name ---
+# Stored the same way as the budget goal - one doc in the same settings
+# collection - so each person's own Firestore project remembers their own
+# name instead of it being hardcoded per-deployment in app.py.
+
+NAME_DOC_ID = "profile"
+
+
+def get_user_name() -> str:
+    """Returns the saved display name, or "" if never set."""
+    db = _get_client()
+    doc = db.collection(SETTINGS_COLLECTION).document(NAME_DOC_ID).get()
+    if doc.exists:
+        return str(doc.to_dict().get("name", "") or "")
+    return ""
+
+
+def set_user_name(name: str) -> None:
+    db = _get_client()
+    db.collection(SETTINGS_COLLECTION).document(NAME_DOC_ID).set({"name": name.strip()})
