@@ -187,6 +187,20 @@ CUSTOM_CSS = """
         display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 8px; width: 100%;
     }
+    /* Header help button: wrap a long label tidily inside the box rather than
+       letting the box grow, and keep a stable height. */
+    [class*="st-key-how_it_works_wrap"] div.stButton button {
+        white-space: normal !important; line-height: 1.35 !important;
+        min-height: 44px !important; padding: 8px 12px !important;
+        font-size: 12px !important;
+    }
+    /* Example buttons: allow the label to wrap inside the button instead of
+       overflowing it, and keep all four the same height whether they wrap or not. */
+    [class*="st-key-example_chip_row"] div.stButton button {
+        white-space: normal !important; line-height: 1.3 !important;
+        font-size: 11px !important; min-height: 42px !important;
+        padding: 6px 8px !important; overflow-wrap: anywhere !important;
+    }
     .example-chip {
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 8px; padding: 6px 10px; font-size: 10.5px;
@@ -727,12 +741,27 @@ with st.sidebar:
         # Streamlit called it. That element becomes a full-height flex column and
         # margin-top:auto does the rest. Nothing is measured or assumed here - no
         # brand height, no row count, no card height.
-        'section[data-testid="stSidebar"] div:has(> .st-key-sidebar_profile) {'
+        # min-height on an inner div was the last mistake: its ancestors do not
+        # fill the viewport, so adding min-height only made the CONTENT taller than
+        # the sidebar - the card dropped below the fold and the sidebar grew a
+        # scrollbar. Nothing is given an explicit height here now.
+        #
+        # Instead the whole ancestor chain becomes a flex column that FILLS its
+        # parent (flex:1) and is allowed to shrink (min-height:0). :has() with a
+        # descendant selector matches every ancestor of the card at once, so the
+        # chain is complete without naming a single wrapper. The sidebar section
+        # supplies the only real height, and that height is the viewport.
+        'section[data-testid="stSidebar"] {'
         "  display: flex !important; flex-direction: column !important;"
-        "  min-height: calc(100vh - 5.5rem) !important; max-width: 100% !important;"
+        "  height: 100vh !important; max-height: 100vh !important;"
         "}"
-        # Siblings keep their natural height so only the card absorbs the slack.
-        'section[data-testid="stSidebar"] div:has(> .st-key-sidebar_profile) > * {'
+        'section[data-testid="stSidebar"] div:has(.st-key-sidebar_profile) {'
+        "  display: flex !important; flex-direction: column !important;"
+        "  flex: 1 1 auto !important; min-height: 0 !important; max-width: 100% !important;"
+        "}"
+        # Children that are NOT ancestors of the card keep their natural height, so
+        # only the space above the card absorbs the slack.
+        'section[data-testid="stSidebar"] div:has(.st-key-sidebar_profile) > *:not(:has(.st-key-sidebar_profile)) {'
         "  flex: 0 0 auto !important;"
         "}"
         # The rule above is deliberately broad, so pin the actual row elements
@@ -1431,15 +1460,20 @@ if page == "Dashboard":
 # PAGE: ADD EXPENSE
 # =============================================================================
 elif page == "Add Expense":
-    title_col, help_col = st.columns([4, 1])
+    # [4, 1] left the button ~174px at a 1280px window; "How it works?" needs
+    # about 150px of text plus padding, so it wrapped to two lines and pushed the
+    # box taller than the heading beside it. Wider column, and the label wraps
+    # cleanly instead of stretching its box.
+    title_col, help_col = st.columns([3, 1.4])
     with title_col:
         st.markdown('<div class="page-title">Add Expense</div>', unsafe_allow_html=True)
         st.markdown('<div class="page-subtitle">Type, speak or upload — we\'ll take care of the rest</div>', unsafe_allow_html=True)
     with help_col:
         if "show_how_it_works" not in st.session_state:
             st.session_state.show_how_it_works = False
-        if st.button("❓ How it works?", key="how_it_works_btn"):
-            st.session_state.show_how_it_works = not st.session_state.show_how_it_works
+        with st.container(key="how_it_works_wrap"):
+            if st.button("❓ How it works?", key="how_it_works_btn"):
+                st.session_state.show_how_it_works = not st.session_state.show_how_it_works
 
     if st.session_state.get("show_how_it_works"):
         st.info(
@@ -1520,26 +1554,36 @@ elif page == "Add Expense":
             with btn_col:
                 st.markdown('<div style="height:2px;"></div>', unsafe_allow_html=True)
                 st.button("↵ Enter", key="enter_btn", type="primary", use_container_width=True)
-            # margin-top:-30px used to drag this up over the textarea, where it
-            # could collide with the last line of typed text. It now sits below.
-            st.markdown(
-                '<div style="text-align:right; font-size:10px; color:var(--muted);'
-                f' margin-top:2px; margin-right:8px;">{len(text_input)}/300</div>',
-                unsafe_allow_html=True,
-            )
+            # The counter was rendered full-width after the columns, so it sat far
+            # right under the Enter button rather than under the textarea it counts.
+            # It now lives inside the input column.
+            with input_col:
+                st.markdown(
+                    '<div style="text-align:right; font-size:10px; color:var(--muted);'
+                    f' margin-top:2px;">{len(text_input)}/300</div>',
+                    unsafe_allow_html=True,
+                )
             if text_input.strip():
                 parsed_text = text_input
 
             st.markdown('<div style="font-size:11px; color:var(--muted); margin-top:14px; margin-bottom:6px;">Examples:</div>', unsafe_allow_html=True)
+            # Was st.columns([3, 0.3, 3, 0.3, 2, 0.3, 3.4]) - four buttons that are
+            # visually one set, given four DIFFERENT widths, with three 0.3 spacer
+            # columns holding a middot between them. The longest label ("Netflix
+            # subscription 649") landed in the narrowest column (weight 2) and wrapped
+            # out of its box, while "Uber ride 150" sat in the widest (3.4).
+            #
+            # Equal columns, no spacers. These have to stay st.columns because they
+            # are real buttons, so equal weights are the best available: every label
+            # gets the same room and the widest one decides when they all wrap.
             with st.container(key="example_chip_row"):
-                ex_cols = st.columns([3, 0.3, 3, 0.3, 2, 0.3, 3.4])
-                for slot, i in enumerate([0, 2, 4, 6]):
-                    with ex_cols[i]:
-                        if st.button(QUICK_EXAMPLES_EN[slot], key=f"ex_en_{slot}"):
-                            st.session_state[f"expense_text_{st.session_state.input_key_counter}"] = QUICK_EXAMPLES_EN[slot]; st.rerun()
-                for sep in [1, 3, 5]:
-                    with ex_cols[sep]:
-                        st.markdown('<div style="text-align:center; color:var(--muted); padding-top:8px;">&middot;</div>', unsafe_allow_html=True)
+                for col, ex in zip(st.columns(len(QUICK_EXAMPLES_EN)), QUICK_EXAMPLES_EN):
+                    with col:
+                        if st.button(ex, key=f"ex_en_{ex}", use_container_width=True):
+                            st.session_state[
+                                f"expense_text_{st.session_state.input_key_counter}"
+                            ] = ex
+                            st.rerun()
 
     else:  # Speak mode
         with card("speak"):
@@ -1693,15 +1737,20 @@ elif page == "Add Expense":
 # PAGE: HISTORY
 # =============================================================================
 elif page == "History":
-    title_col, help_col = st.columns([4, 1])
+    # [4, 1] left the button ~174px at a 1280px window; "How it works?" needs
+    # about 150px of text plus padding, so it wrapped to two lines and pushed the
+    # box taller than the heading beside it. Wider column, and the label wraps
+    # cleanly instead of stretching its box.
+    title_col, help_col = st.columns([3, 1.4])
     with title_col:
         st.markdown('<div class="page-title">History</div>', unsafe_allow_html=True)
         st.markdown('<div class="page-subtitle">View, search and manage your past expenses</div>', unsafe_allow_html=True)
     with help_col:
         if "hist_how_it_works" not in st.session_state:
             st.session_state.hist_how_it_works = False
-        if st.button("❓ How it works?", key="hist_how_it_works_btn"):
-            st.session_state.hist_how_it_works = not st.session_state.hist_how_it_works
+        with st.container(key="how_it_works_wrap_hist"):
+            if st.button("❓ How it works?", key="hist_how_it_works_btn"):
+                st.session_state.hist_how_it_works = not st.session_state.hist_how_it_works
     if st.session_state.get("hist_how_it_works"):
         st.info(
             "Filter by date, category or payment mode, or search by merchant/note. "
