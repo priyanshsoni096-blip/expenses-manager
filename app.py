@@ -183,6 +183,10 @@ CUSTOM_CSS = """
     /* Example chips: Devanagari glyphs are taller than Latin ones, so equal
        padding left the Hindi row visibly taller than the English row. A shared
        min-height with centred content makes both rows match. */
+    .chip-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px; width: 100%;
+    }
     .example-chip {
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 8px; padding: 6px 10px; font-size: 10.5px;
@@ -213,7 +217,23 @@ CUSTOM_CSS = """
     .tip-box { background: var(--accent-soft); border: 1px solid #1F4A2C; border-radius: 8px; padding: 10px 16px; font-size: 11.5px; color: #86EFAC; margin-bottom: 20px; display:inline-flex; align-items:center; gap:8px; }
     .tip-box b { color: var(--accent); letter-spacing: 0.08em; }
 
+    /* Stat cards used to be st.columns(4). st.columns is a FIXED count: four
+       columns stay four columns at every width, and when they no longer fit
+       Streamlit wraps the overflow onto its own full-width row - which is why the
+       fourth card stretched right across the page while the other three shared a
+       line.
+
+       auto-fit + minmax hands the decision to the browser: it fits as many
+       columns as the actual space allows and redistributes the remainder evenly.
+       4 across when wide, 2x2 when medium, 1 when narrow, with no breakpoints and
+       no measured pixel values anywhere. */
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 14px; width: 100%;
+    }
     .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; width: 100%; box-sizing: border-box; min-height: 84px; }
+    .stat-card-value, .stat-card-sub, .stat-card-label { overflow-wrap: anywhere; }
     /* Force every wrapper layer between the column and our card to actually stretch —
        Streamlit's own containers otherwise shrink-wrap to content, so a card with more
        text (e.g. Top Category) renders wider than one with less (e.g. This Month). */
@@ -468,34 +488,6 @@ if "page" not in st.session_state:
     st.session_state.page = "Dashboard"
 
 
-# Height of everything in the sidebar ABOVE the flexible gap. Derived from the
-# nav item count, so adding a page adjusts the gap automatically. Used to size a
-# real in-flow spacer in vh units, which is what actually pushes the profile card
-# to the bottom - margin-top:auto alone depends on Streamlit's wrapper divs
-# forming a flex column, and guessing that chain has failed on deploy.
-_SB_BRAND_PX = 130          # logo + 3-line wordmark + tagline + divider
-_SB_NAVROW_PX = 44          # 40px min-height + 4px margin, per row
-_SB_PROFILE_PX = 104        # profile card + "Edit name" link
-_SB_CHROME_PX = 60          # Streamlit's own sidebar padding, top and bottom
-
-
-def _sidebar_gap_css() -> str:
-    """CSS length for the flexible gap above the profile card.
-
-    max(0px, ...) so a short viewport collapses the gap instead of producing a
-    negative height and a scrollbar. Being a real element in normal flow, it can
-    only ever push the card down - it cannot cause an overlap the way the old
-    position:absolute card did.
-    """
-    above = (
-        _SB_BRAND_PX
-        + _SB_NAVROW_PX * len(NAV_ITEMS)
-        + _SB_PROFILE_PX
-        + _SB_CHROME_PX
-    )
-    return f"max(0px, calc(100vh - {above}px))"
-
-
 def _scroll_to_top(nonce: str) -> None:
     """Scroll the main content area back to the top.
 
@@ -525,6 +517,29 @@ def _scroll_to_top(nonce: str) -> None:
         "</script>",
         height=0,
     )
+
+
+def stat_card(label: str, value: str, sub: str = "", icon: str = "", value_html: str = "") -> str:
+    """HTML for one stat card. Returns markup rather than rendering, so a whole
+    row can be emitted as a single grid - see stat_grid()."""
+    parts = []
+    if icon:
+        parts.append(f'<div class="stat-card-icon">{icon}</div>')
+    parts.append(f'<div class="stat-card-label">{label}</div>')
+    parts.append(value_html or f'<div class="stat-card-value">{value}</div>')
+    if sub:
+        parts.append(f'<div class="stat-card-sub">{sub}</div>')
+    return '<div class="stat-card">' + "".join(parts) + "</div>"
+
+
+def stat_grid(cards: list) -> None:
+    """Render stat cards as one auto-fitting CSS grid.
+
+    Deliberately NOT st.columns(len(cards)): that pins the column count, so on a
+    narrower window the last card wrapped onto a full-width row of its own. The
+    grid lets the browser choose how many fit.
+    """
+    st.markdown('<div class="stat-grid">' + "".join(cards) + "</div>", unsafe_allow_html=True)
 
 
 def card(name: str):
@@ -703,35 +718,29 @@ with st.sidebar:
         # nav above it simply has less free space to absorb. The column chain is
         # depth-limited to three levels (BorderWrapper > div > stVerticalBlock)
         # so vertical blocks nested INSIDE the card are left alone.
-        # The flex chain below is a BEST EFFORT, not the mechanism. It only works
-        # if these wrapper testids exist and are the real ancestor chain, and that
-        # guess has already failed once on deploy (the card sat directly under the
-        # nav). The thing that actually positions the card is the vh-sized spacer
-        # element rendered just above it - see _sidebar_gap_css(). Several
-        # candidate selectors are listed so the flex path can also work wherever
-        # it happens to match; both mechanisms push the same direction, so if both
-        # apply the card still lands at the bottom and nothing overlaps.
-        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"],'
-        'section[data-testid="stSidebar"] [data-testid="stSidebarContent"],'
-        'section[data-testid="stSidebar"] > div,'
-        'section[data-testid="stSidebar"] > div > div {'
+        # THIRD attempt, and this one stops guessing. Previous versions needed to
+        # know which wrapper div is the card's parent: first a testid chain (wrong
+        # on deploy), then a vh-sized spacer whose height I ESTIMATED from font
+        # sizes and row counts (off by ~28px, so the card overflowed the fold).
+        #
+        # :has(> ...) asks the browser to find the card's direct parent, whatever
+        # Streamlit called it. That element becomes a full-height flex column and
+        # margin-top:auto does the rest. Nothing is measured or assumed here - no
+        # brand height, no row count, no card height.
+        'section[data-testid="stSidebar"] div:has(> .st-key-sidebar_profile) {'
         "  display: flex !important; flex-direction: column !important;"
-        "  max-width: 100% !important;"
+        "  min-height: calc(100vh - 5.5rem) !important; max-width: 100% !important;"
         "}"
-        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {'
-        "  min-height: calc(100vh - 5rem) !important;"
+        # Siblings keep their natural height so only the card absorbs the slack.
+        'section[data-testid="stSidebar"] div:has(> .st-key-sidebar_profile) > * {'
+        "  flex: 0 0 auto !important;"
         "}"
         # The rule above is deliberately broad, so pin the actual row elements
         # back to their natural height. These selectors carry one more class than
         # the chain above, so they win on specificity rather than order.
-        'section[data-testid="stSidebar"] [class*="st-key-navrow_"],'
-        'section[data-testid="stSidebar"] .st-key-sidebar_profile,'
-        'section[data-testid="stSidebar"] .sidebar-flex-gap {'
+        'section[data-testid="stSidebar"] [class*="st-key-navrow_"] {'
         "  flex: 0 0 auto !important;"
         "}"
-        # The gap is allowed to grow if a flex parent does materialise, but its
-        # vh min-height is what does the work when none does.
-        'section[data-testid="stSidebar"] .sidebar-flex-gap { flex-grow: 1 !important; }'
         ".st-key-sidebar_profile {"
         "  margin-top: auto !important; width: 100% !important;"
         "  background: var(--surface-2) !important;"
@@ -784,13 +793,6 @@ with st.sidebar:
         "</style>",
         unsafe_allow_html=True,
     )
-    # This is what puts the profile card at the bottom: a real, in-flow element
-    # that grows with the viewport. No assumptions about Streamlit's DOM.
-    st.markdown(
-        f'<div class="sidebar-flex-gap" style="height:{_sidebar_gap_css()};"></div>',
-        unsafe_allow_html=True,
-    )
-
     with st.container(key="sidebar_profile"):
         user_name = get_user_name()
         editing_name = st.session_state.get("editing_profile_name", False)
@@ -1132,14 +1134,13 @@ if page == "Dashboard":
     else:
         highest_amt, highest_merchant, highest_date = 0.0, "—", ""
 
-    c1, c2, c3, c4 = st.columns(4)
-    for col, icon, label, value, sub in [
-        (c1, "💳", "Total Spent", f"₹{total_spent:,.0f}", "This Month"),
-        (c2, "🔁", "Transactions", f"{txn_count}", "This Month"),
-        (c3, "📈", "Daily Average", f"₹{daily_avg:,.0f}", "This Month"),
-        (c4, "🔺", "Highest Expense", f"₹{highest_amt:,.0f}", f"{highest_merchant} • {highest_date}"),
-    ]:
-        col.markdown(f'<div class="stat-card"><div class="stat-card-icon">{icon}</div><div class="stat-card-label">{label}</div><div class="stat-card-value">{value}</div><div class="stat-card-sub">{sub}</div></div>', unsafe_allow_html=True)
+    stat_grid([
+        stat_card("Total Spent", f"₹{total_spent:,.0f}", "This Month", "💳"),
+        stat_card("Transactions", f"{txn_count}", "This Month", "🔁"),
+        stat_card("Daily Average", f"₹{daily_avg:,.0f}", "This Month", "📈"),
+        stat_card("Highest Expense", f"₹{highest_amt:,.0f}",
+                  f"{highest_merchant} • {highest_date}", "🔺"),
+    ])
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1548,12 +1549,18 @@ elif page == "Add Expense":
                 audio = mic_recorder(start_prompt="🎤 Start Recording", stop_prompt="⏹ Stop Recording", format="wav", just_once=True, key="mic_input", use_container_width=True)
 
             st.markdown('<div style="font-size:11px; color:var(--muted); margin-top:14px; margin-bottom:6px;">Try saying something like:</div>', unsafe_allow_html=True)
-            for row_examples, top_gap in ((QUICK_EXAMPLES_EN, "0"), (QUICK_EXAMPLES_HI, "6px")):
-                for col, ex in zip(st.columns(4), row_examples):
-                    col.markdown(
-                        f'<div class="example-chip" style="margin-top:{top_gap};">{ex}</div>',
-                        unsafe_allow_html=True,
-                    )
+            # One auto-fitting grid for both language rows, for the same reason as
+            # the stat cards: st.columns(4) pins four across and wraps the leftover
+            # onto a full-width row of its own once they stop fitting.
+            st.markdown(
+                '<div class="chip-grid">'
+                + "".join(
+                    f'<div class="example-chip">{ex}</div>'
+                    for ex in list(QUICK_EXAMPLES_EN) + list(QUICK_EXAMPLES_HI)
+                )
+                + "</div>",
+                unsafe_allow_html=True,
+            )
 
             st.markdown(
                 '<div class="insight-row" style="font-size:11px; color:var(--muted); margin-top:14px;">'
@@ -1778,18 +1785,21 @@ elif page == "History":
     top_cat_icon = CATEGORY_ICONS.get(top_cat_name, "•")
     top_cat_color = CATEGORY_COLORS.get(top_cat_name, "#9CA3AF")
 
-    s1, s2, s3, s4 = st.columns(4)
-    s1.markdown(f'<div class="stat-card"><div class="stat-card-label">Total Expenses</div><div class="stat-card-value">₹{total_exp:,.2f}</div><div class="stat-card-sub">{len(filtered)} Transactions</div></div>', unsafe_allow_html=True)
-    s2.markdown(f'<div class="stat-card"><div class="stat-card-label">This Month</div><div class="stat-card-value">₹{this_month_exp:,.2f}</div><div class="stat-card-sub">{this_month_count} Transactions</div></div>', unsafe_allow_html=True)
-    s3.markdown(f'<div class="stat-card"><div class="stat-card-label">Average</div><div class="stat-card-value">₹{avg_exp:,.2f}</div><div class="stat-card-sub">Per Transaction</div></div>', unsafe_allow_html=True)
-    s4.markdown(
-        f'<div class="stat-card"><div class="stat-card-label">Top Category</div>'
-        f'<div style="display:flex; align-items:center; gap:6px; margin-top:4px;">'
-        f'<span style="width:22px; height:22px; border-radius:50%; background:{top_cat_color}22; color:{top_cat_color}; display:flex; align-items:center; justify-content:center; font-size:11px;">{top_cat_icon}</span>'
-        f'<span class="stat-card-value" style="margin-top:0;">{top_cat_name}</span></div>'
-        f'<div class="stat-card-sub">₹{top_cat_amt:,.2f} ({top_cat_pct:.0f}%)</div></div>',
-        unsafe_allow_html=True,
-    )
+    stat_grid([
+        stat_card("Total Expenses", f"₹{total_exp:,.2f}", f"{len(filtered)} Transactions"),
+        stat_card("This Month", f"₹{this_month_exp:,.2f}", f"{this_month_count} Transactions"),
+        stat_card("Average", f"₹{avg_exp:,.2f}", "Per Transaction"),
+        stat_card(
+            "Top Category", "", f"₹{top_cat_amt:,.2f} ({top_cat_pct:.0f}%)",
+            value_html=(
+                '<div style="display:flex; align-items:center; gap:6px; margin-top:4px; min-width:0;">'
+                f'<span style="width:22px; height:22px; border-radius:50%; flex-shrink:0;'
+                f' background:{top_cat_color}22; color:{top_cat_color}; display:flex;'
+                f' align-items:center; justify-content:center; font-size:11px;">{top_cat_icon}</span>'
+                f'<span class="stat-card-value" style="margin-top:0;">{top_cat_name}</span></div>'
+            ),
+        ),
+    ])
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1912,11 +1922,12 @@ elif page == "Analytics":
         avg_a = total_a / len(a_filtered) if len(a_filtered) else 0
         highest_row = a_filtered.loc[a_filtered["amount"].idxmax()]
 
-        s1, s2, s3, s4 = st.columns(4)
-        s1.markdown(f'<div class="stat-card"><div class="stat-card-label">Total Expenses</div><div class="stat-card-value">₹{total_a:,.0f}</div><div class="stat-card-sub">{len(a_filtered)} Transactions</div></div>', unsafe_allow_html=True)
-        s2.markdown(f'<div class="stat-card"><div class="stat-card-label">This Month</div><div class="stat-card-value">₹{this_month_a:,.0f}</div><div class="stat-card-sub">{this_month_a_count} Transactions</div></div>', unsafe_allow_html=True)
-        s3.markdown(f'<div class="stat-card"><div class="stat-card-label">Average Per Day</div><div class="stat-card-value">₹{avg_a:,.0f}</div><div class="stat-card-sub">{len(a_filtered)} Transactions</div></div>', unsafe_allow_html=True)
-        s4.markdown(f'<div class="stat-card"><div class="stat-card-label">Highest Expense</div><div class="stat-card-value">₹{highest_row["amount"]:,.0f}</div><div class="stat-card-sub">{highest_row["merchant"]}</div></div>', unsafe_allow_html=True)
+        stat_grid([
+            stat_card("Total Expenses", f"₹{total_a:,.0f}", f"{len(a_filtered)} Transactions"),
+            stat_card("This Month", f"₹{this_month_a:,.0f}", f"{this_month_a_count} Transactions"),
+            stat_card("Average Per Day", f"₹{avg_a:,.0f}", f"{len(a_filtered)} Transactions"),
+            stat_card("Highest Expense", f"₹{highest_row['amount']:,.0f}", str(highest_row["merchant"])),
+        ])
 
         st.markdown("<br>", unsafe_allow_html=True)
         cat_totals_a = storage.category_totals(a_filtered)
@@ -2079,11 +2090,13 @@ elif page == "Categories":
     avg_per_cat = (total_all / len(cat_totals_all)) if len(cat_totals_all) else 0
     uncategorized = df[df["category"].isin(["", None])] if not df.empty else pd.DataFrame()
 
-    s1, s2, s3, s4 = st.columns(4)
-    s1.markdown(f'<div class="stat-card"><div class="stat-card-label">Total Spent</div><div class="stat-card-value">₹{total_all:,.0f}</div><div class="stat-card-sub">{len(df)} Transactions</div></div>', unsafe_allow_html=True)
-    s2.markdown(f'<div class="stat-card"><div class="stat-card-label">Top Category</div><div class="stat-card-value" style="font-size:15px;">{top_cat}</div><div class="stat-card-sub">{top_cat_amt_pct:.0f}%</div></div>', unsafe_allow_html=True)
-    s3.markdown(f'<div class="stat-card"><div class="stat-card-label">Avg. Per Category</div><div class="stat-card-value">₹{avg_per_cat:,.0f}</div><div class="stat-card-sub">{len(cat_totals_all)} Categories</div></div>', unsafe_allow_html=True)
-    s4.markdown(f'<div class="stat-card"><div class="stat-card-label">Uncategorized</div><div class="stat-card-value">₹0.00</div><div class="stat-card-sub">{len(uncategorized)} Transactions</div></div>', unsafe_allow_html=True)
+    stat_grid([
+        stat_card("Total Spent", f"₹{total_all:,.0f}", f"{len(df)} Transactions"),
+        stat_card("Top Category", "", f"{top_cat_amt_pct:.0f}%",
+                  value_html=f'<div class="stat-card-value" style="font-size:15px;">{top_cat}</div>'),
+        stat_card("Avg. Per Category", f"₹{avg_per_cat:,.0f}", f"{len(cat_totals_all)} Categories"),
+        stat_card("Uncategorized", "₹0.00", f"{len(uncategorized)} Transactions"),
+    ])
 
     st.markdown("<br>", unsafe_allow_html=True)
 
