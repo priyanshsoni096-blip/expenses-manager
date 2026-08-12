@@ -154,6 +154,31 @@ CUSTOM_CSS = """
        inherited that narrower width. Percentages, not fixed pixels, so this
        tracks any sidebar width. */
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { max-width: 100% !important; }
+    /* --- Sidebar layout: nav on top, profile pinned to the bottom -----------
+       The sidebar's user-content region and its FIRST vertical block become a
+       full-height flex column. The profile card (last child) then gets
+       margin-top:auto, which soaks up all leftover vertical space and drops it
+       to the bottom. Crucially this uses margin:auto, NOT a forced height on
+       the card or a min-height on the content - so when the window is too
+       short to fit everything, the auto-margin simply collapses to 0 and the
+       card sits right under the nav. It can NEVER push content taller than the
+       sidebar, so the sidebar never needs to scroll. This adapts live on
+       resize with no JS. The ">" limits the flex/auto to the OUTERMOST block
+       so vertical blocks nested inside cards are untouched. */
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        height: 100% !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div[data-testid="stVerticalBlock"] {
+        height: 100% !important; display: flex !important; flex-direction: column !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div[data-testid="stVerticalBlock"] > .st-key-sidebar_profile {
+        margin-top: auto !important;
+    }
+    /* Belt-and-suspenders: forbid the sidebar from scrolling. If the flex math
+       above ever fails on some build, the nav simply clips rather than adding a
+       scrollbar - which is the lesser evil and matches "sidebar shouldn't
+       scroll". */
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { overflow-y: hidden !important; }
     section[data-testid="stSidebar"] [class*="st-key-navrow_"],
     section[data-testid="stSidebar"] [class*="st-key-navrow_"] > div,
     section[data-testid="stSidebar"] [class*="st-key-navrow_"] div.stButton,
@@ -750,65 +775,16 @@ with st.sidebar:
                 st.rerun()
 
     # --- Profile card --------------------------------------------------------
-    # Pinned to the bottom of the sidebar with position:absolute + left/right
-    # rather than position:fixed + a hardcoded width:220px. The old version was
-    # measured against the viewport, not the sidebar, so dragging the sidebar
-    # wider or narrower left the card at 220px - either floating short of the
-    # edge or spilling over the main content.
-    #
-    # left/right instead of a width means the card always spans its container,
-    # whatever that container's width happens to be. If a Streamlit wrapper ever
-    # becomes the positioned ancestor instead of the sidebar itself, the card
-    # stops being bottom-pinned but stays correctly sized - it degrades to
-    # sitting in the flow rather than breaking the layout.
+    # Pinned to the sidebar bottom by CSS flexbox (the rule up in CUSTOM_CSS
+    # that makes stSidebarUserContent's first vertical block a full-height flex
+    # column and gives this card margin-top:auto). This block only styles the
+    # card's own box. margin:auto pins it to the bottom when there's room and
+    # collapses to 0 when there isn't, so the sidebar never scrolls - which is
+    # why the earlier JS approach was removed (it forced heights that pushed
+    # content past the sidebar and created the scrollbar).
     st.markdown(
         "<style>"
-        # FIX: the card used position:absolute + bottom:16px. That required the
-        # sidebar to be the nearest positioned ancestor AND to have a real
-        # height - neither of which this file could guarantee, so on deploy it
-        # pinned to the bottom of the CONTENT (just under the nav) instead of the
-        # sidebar. Worse, absolute positioning takes the card OUT OF FLOW, so
-        # when the name editor opens and the card roughly doubles in height it
-        # grew upward from a fixed bottom edge and landed on top of "Categories".
-        #
-        # It is now IN FLOW, pushed down by margin-top:auto inside a full-height
-        # flex column. Being in flow means it can never overlap: if it grows, the
-        # nav above it simply has less free space to absorb. The column chain is
-        # depth-limited to three levels (BorderWrapper > div > stVerticalBlock)
-        # so vertical blocks nested INSIDE the card are left alone.
-        # THIRD attempt, and this one stops guessing. Previous versions needed to
-        # know which wrapper div is the card's parent: first a testid chain (wrong
-        # on deploy), then a vh-sized spacer whose height I ESTIMATED from font
-        # sizes and row counts (off by ~28px, so the card overflowed the fold).
-        #
-        # :has(> ...) asks the browser to find the card's direct parent, whatever
-        # Streamlit called it. That element becomes a full-height flex column and
-        # margin-top:auto does the rest. Nothing is measured or assumed here - no
-        # brand height, no row count, no card height.
-        # DECISION: the card is no longer pinned to the sidebar bottom.
-        #
-        # Four attempts at pinning it all failed for the same reason - each needed
-        # a fact about Streamlit's sidebar DOM that I could not verify from here:
-        #   1. position:absolute + bottom:16px   -> needed the sidebar to be the
-        #      positioned ancestor; it wasn't, so it pinned under the nav.
-        #   2. testid flex chain                 -> needed those testids to be the
-        #      real ancestors; they weren't.
-        #   3. vh spacer from estimated heights  -> my estimate was ~28px short, so
-        #      the card overflowed the fold.
-        #   4. :has() + min-height on an inner   -> made the CONTENT taller than the
-        #      sidebar, so the card went below the fold and the sidebar scrolled.
-        #
-        # Bottom-pinning is cosmetic. Being visible is not. The card now sits in
-        # normal flow directly after the nav, which needs no assumptions at all:
-        # it is always visible, can never overlap the nav, and grows downward
-        # safely when the name editor opens.
         ".st-key-sidebar_profile {"
-        # Bottom-pinning is now done in JS (see the components.html block right
-        # after this card is rendered) - JS reads the real DOM instead of this
-        # CSS guessing which wrapper is the flex parent, which failed repeatedly.
-        # This rule only styles the card's own box (bg/border/padding). The
-        # margin-top:auto that drops it to the bottom is applied by that JS to
-        # the card's actual top-level wrapper, which is a level up from here.
         "  width: 100% !important;"
         "  background: var(--surface-2) !important;"
         "  border: 1px solid var(--border) !important; border-radius: 10px !important;"
@@ -911,48 +887,6 @@ with st.sidebar:
                 if st.button("✏️ Edit", key="profile_name_edit_btn"):
                     st.session_state.editing_profile_name = True
                     st.rerun()
-
-    # --- Pin the profile card to the sidebar bottom (JS) ---------------------
-    # CSS alone could never do this reliably from here: it needed to know which
-    # Streamlit wrapper div is the sidebar's scroll/flex container, and that
-    # varies by build. JS doesn't have to guess - it walks UP from the profile
-    # card (found by its stable st-key-sidebar_profile class) to whichever
-    # element is the sidebar's content column, makes THAT a full-height flex
-    # column, and gives the card margin-top:auto. Reading the real DOM at
-    # runtime means no assumption about wrapper names can be wrong. Re-runs on
-    # every render via the changing nonce; a MutationObserver re-applies it if
-    # Streamlit re-renders the sidebar after this script runs.
-    components.html(
-        "<script>"
-        f"/* {st.session_state.get('page','')}-{st.session_state.get('editing_profile_name',False)} */"
-        "const doc = window.parent.document;"
-        "function pin() {"
-        "  const card = doc.querySelector('.st-key-sidebar_profile');"
-        "  if (!card) return;"
-        "  const sidebar = doc.querySelector('section[data-testid=\"stSidebar\"]');"
-        "  if (!sidebar) return;"
-        "  const userContent = sidebar.querySelector('[data-testid=\"stSidebarUserContent\"]') || sidebar;"
-        "  let col = card;"
-        "  while (col.parentElement && col.parentElement !== userContent && col.parentElement !== sidebar) {"
-        "    col = col.parentElement;"
-        "  }"
-        "  const flexParent = col.parentElement || userContent;"
-        "  if (col.style.marginTop === 'auto' && flexParent.style.display === 'flex') return;"
-        "  flexParent.style.display = 'flex';"
-        "  flexParent.style.flexDirection = 'column';"
-        "  flexParent.style.minHeight = '100%';"
-        "  userContent.style.height = '100%';"
-        "  col.style.marginTop = 'auto';"
-        "}"
-        "pin();"
-        "const sb = doc.querySelector('section[data-testid=\"stSidebar\"]');"
-        "if (sb && !sb._pinObserver) {"
-        "  sb._pinObserver = new MutationObserver(() => pin());"
-        "  sb._pinObserver.observe(sb, {childList: true, subtree: true});"
-        "}"
-        "</script>",
-        height=0,
-    )
 
 page = st.session_state.page
 st.session_state.setdefault("fs_chart", None)
