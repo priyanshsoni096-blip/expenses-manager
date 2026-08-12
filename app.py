@@ -154,23 +154,29 @@ CUSTOM_CSS = """
        inherited that narrower width. Percentages, not fixed pixels, so this
        tracks any sidebar width. */
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { max-width: 100% !important; }
-    /* --- Sidebar layout: nav on top, profile pinned toward the bottom -------
-       The user-content region and its first vertical block are a full-height
-       flex column, and the profile card gets margin-top:auto to drop toward
-       the bottom. Only these two specific elements get height/flex - an
-       earlier version also forced height:100% on section>div>div, which
-       collapsed the nav container and made the whole nav DISAPPEAR. Never
-       height the generic sidebar wrapper divs; only the named testids. */
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        height: 100% !important;
+    /* --- Sidebar layout: nav on top, profile pinned to the bottom -----------
+       RESTORED from the pre-deploy version that worked. The sidebar is the
+       positioned ancestor (position:relative) and the profile card is
+       position:absolute; bottom:16px, spanning left/right so it tracks the
+       sidebar width. This was replaced with a flexbox height:100% approach
+       during debugging, which (a) forced heights onto Streamlit's column
+       wrappers, throwing off the width calc that makes card content overflow,
+       and (b) repeatedly collapsed or hid the nav. Absolute positioning
+       touches nothing about the flow, so it can't cause either problem. On a
+       very short viewport it un-pins (see the @media below) so it can't land
+       on top of the nav. */
+    section[data-testid="stSidebar"] { position: relative !important; }
+    .st-key-sidebar_profile {
+        position: absolute !important; bottom: 16px !important;
+        left: 12px !important; right: 12px !important;
+        width: auto !important; box-sizing: border-box !important;
     }
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div[data-testid="stVerticalBlock"] {
-        height: 100% !important; display: flex !important; flex-direction: column !important;
+    @media (max-height: 600px) {
+        .st-key-sidebar_profile {
+            position: static !important; margin-top: 20px !important;
+            left: auto !important; right: auto !important;
+        }
     }
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div[data-testid="stVerticalBlock"] > .st-key-sidebar_profile {
-        margin-top: auto !important;
-    }
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { overflow-x: hidden !important; }
     section[data-testid="stSidebar"] [class*="st-key-navrow_"],
     section[data-testid="stSidebar"] [class*="st-key-navrow_"] > div,
     section[data-testid="stSidebar"] [class*="st-key-navrow_"] div.stButton,
@@ -766,17 +772,14 @@ with st.sidebar:
                 st.rerun()
 
     # --- Profile card --------------------------------------------------------
-    # Pinned to the sidebar bottom by CSS flexbox (the rule up in CUSTOM_CSS
-    # that makes stSidebarUserContent's first vertical block a full-height flex
-    # column and gives this card margin-top:auto). This block only styles the
-    # card's own box. margin:auto pins it to the bottom when there's room and
-    # collapses to 0 when there isn't, so the sidebar never scrolls - which is
-    # why the earlier JS approach was removed (it forced heights that pushed
-    # content past the sidebar and created the scrollbar).
+    # Pinned to the sidebar bottom by position:absolute (the rule up in
+    # CUSTOM_CSS). This block only styles the card's own box (bg/border/padding)
+    # and the Edit button inside it. The card contains BOTH the avatar+name row
+    # and the Edit button, so the whole profile unit pins together.
     st.markdown(
         "<style>"
         ".st-key-sidebar_profile {"
-        "  width: 100% !important;"
+        "  width: auto !important;"
         "  background: var(--surface-2) !important;"
         "  border: 1px solid var(--border) !important; border-radius: 10px !important;"
         "  padding: 10px 12px !important; box-sizing: border-box !important;"
