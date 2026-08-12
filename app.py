@@ -60,46 +60,29 @@ CUSTOM_CSS = """
         --red: #F87171; --red-soft: #3A1A1A;
 
         /* --- FLUID SCALE ---------------------------------------------------
-           Every size that affects layout is a clamp(min, preferred, max), so it
-           scales with the viewport instead of being one number chosen at one
-           window size. clamp() never goes below min or above max, so text stays
-           legible when narrow and stops growing when very wide.
-
-           The vw middle term is what makes it track the screen. Previously every
-           one of these was a fixed px value, which is why nothing adjusted. */
+           Sizes that affect layout are clamp(min, preferred, max) so they scale
+           with the viewport instead of being one number picked at one window
+           size. The vw middle term tracks the screen; min/max stop it becoming
+           unreadable or absurd. */
         --fs-page-title: clamp(17px, 1.55vw, 26px);
         --fs-page-sub:   clamp(11px, 0.95vw, 14px);
         --fs-label:      clamp(9px, 0.78vw, 11px);
         --fs-body:       clamp(11px, 0.92vw, 13.5px);
         --fs-value:      clamp(15px, 1.35vw, 22px);
         --fs-small:      clamp(9px, 0.72vw, 10.5px);
-
         --gap:       clamp(8px, 0.85vw, 16px);
         --card-pad:  clamp(12px, 1.15vw, 20px);
         --card-gap:  clamp(10px, 1vw, 16px);
     }
 
-    /* --- GLOBAL COLUMN BEHAVIOUR ------------------------------------------
-       Streamlit puts a min-width on every column, which is why a 4-column row
-       WRAPPED its last column onto a line of its own instead of the four simply
-       getting narrower. min-width:0 lets columns shrink proportionally, so a
-       [3,1] row stays 75/25 at every width - genuinely ratio-based.
-
-       Below 820px there is not enough room to shrink usefully, so wrapping is
-       allowed again and columns go full width - a real stacked layout rather
-       than an accidental one. */
-    /* NOTE: no `gap` is set here on purpose. Streamlit already spaces columns
-       by baking the spacing into each column's flex-basis. Adding a CSS gap on
-       top made the columns' widths plus the new gaps exceed 100% of the row, so
-       the last column pushed out past the row's right edge - which is what made
-       the Monthly Budget card overlap Quick Add. */
-    [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
-    }
-    [data-testid="stColumn"] {
-        min-width: 0 !important;
-    }
-    [data-testid="stColumn"] > div { min-width: 0 !important; }
+    /* --- Narrow screens: stack columns -------------------------------------
+       The only global column rule. Two others (flex-wrap:nowrap and min-width:0
+       on every column) were tried and removed: they made the widgets inside a
+       card render wider than the card, spilling ~30px past its right border,
+       because shrinking a column below Streamlit's intended minimum
+       desynchronises the column box from the element widths Streamlit computes
+       for its contents. The stat-card wrap they were meant to fix is handled by
+       .stat-grid instead, which does not use st.columns at all. */
     @media (max-width: 820px) {
         [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
         [data-testid="stColumn"] { flex: 1 1 100% !important; }
@@ -228,32 +211,6 @@ CUSTOM_CSS = """
     /* Example chips: Devanagari glyphs are taller than Latin ones, so equal
        padding left the Hindi row visibly taller than the English row. A shared
        min-height with centred content makes both rows match. */
-    .chip-grid {
-        display: grid; grid-template-columns: repeat(auto-fit, minmax(clamp(120px, 11vw, 170px), 1fr));
-        gap: 8px; width: 100%;
-    }
-    /* Header help button: wrap a long label tidily inside the box rather than
-       letting the box grow, and keep a stable height. */
-    [class*="st-key-how_it_works_wrap"] div.stButton button {
-        white-space: normal !important; line-height: 1.35 !important;
-        min-height: 44px !important; padding: 8px 12px !important;
-        font-size: 12px !important;
-    }
-    /* Example buttons: allow the label to wrap inside the button instead of
-       overflowing it, and keep all four the same height whether they wrap or not. */
-    [class*="st-key-example_chip_row"] div.stButton button {
-        white-space: normal !important; line-height: 1.3 !important;
-        font-size: 11px !important; min-height: 42px !important;
-        padding: 6px 8px !important; overflow-wrap: anywhere !important;
-    }
-    /* Charts keep the height Plotly is given in Python. An earlier version forced
-       height here via --chart-h on .js-plotly-plot / .plot-container: the pie grew
-       to fill everything and the trend chart rendered empty, because those
-       elements are sized by Plotly's own layout engine and overriding them from
-       outside desynchronises the SVG viewport from its container. config
-       responsive:true is kept - that makes Plotly re-measure on resize, which is
-       the supported way to do this. */
-    [data-testid="stPlotlyChart"] { width: 100% !important; }
     .example-chip {
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 8px; padding: 6px 10px; font-size: 10.5px;
@@ -284,23 +241,28 @@ CUSTOM_CSS = """
     .tip-box { background: var(--accent-soft); border: 1px solid #1F4A2C; border-radius: 8px; padding: 10px 16px; font-size: 11.5px; color: #86EFAC; margin-bottom: 20px; display:inline-flex; align-items:center; gap:8px; }
     .tip-box b { color: var(--accent); letter-spacing: 0.08em; }
 
-    /* Stat cards used to be st.columns(4). st.columns is a FIXED count: four
-       columns stay four columns at every width, and when they no longer fit
-       Streamlit wraps the overflow onto its own full-width row - which is why the
-       fourth card stretched right across the page while the other three shared a
-       line.
-
-       auto-fit + minmax hands the decision to the browser: it fits as many
-       columns as the actual space allows and redistributes the remainder evenly.
-       4 across when wide, 2x2 when medium, 1 when narrow, with no breakpoints and
-       no measured pixel values anywhere. */
+    /* Stat cards were st.columns(4). st.columns is a FIXED count: four columns
+       stay four at every width, and when they no longer fit Streamlit wraps the
+       last one onto a full-width row of its own. auto-fit hands the decision to
+       the browser: as many columns as actually fit, remainder shared evenly. */
     .stat-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(clamp(150px, 14vw, 210px), 1fr));
         gap: var(--card-gap); width: 100%;
     }
-    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; width: 100%; box-sizing: border-box; min-height: 84px; }
     .stat-card-value, .stat-card-sub, .stat-card-label { overflow-wrap: anywhere; }
+    .chip-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(clamp(120px, 11vw, 170px), 1fr));
+        gap: 8px; width: 100%;
+    }
+    [data-testid="stPlotlyChart"] { width: 100% !important; }
+    /* Header help button: wrap a long label inside its box instead of stretching it. */
+    [class*="st-key-how_it_works_wrap"] div.stButton button {
+        white-space: normal !important; line-height: 1.35 !important;
+        min-height: 44px !important; padding: 8px 12px !important; font-size: 12px !important;
+    }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; width: 100%; box-sizing: border-box; min-height: 84px; }
     /* Force every wrapper layer between the column and our card to actually stretch —
        Streamlit's own containers otherwise shrink-wrap to content, so a card with more
        text (e.g. Top Category) renders wider than one with less (e.g. This Month). */
@@ -362,21 +324,13 @@ CUSTOM_CSS = """
     .st-key-hist_filter_pay div[data-baseweb="select"]::before { content: "💳"; }
     .st-key-hist_search_box div[data-baseweb="input"]::before { content: "🔍"; }
 
-    /* Progress bar. These used to be depth-counted selectors:
-           .stProgress > div > div > div  -> fill
-           .stProgress > div > div        -> track
-       Depth is a GUESS about Streamlit's internal DOM, and it was off by one on
-       the deployed build: "> div > div > div" landed on the TRACK, painted the
-       whole bar accent green, and a 9% budget bar rendered as 100% full.
-
-       Now depth-independent. role="progressbar" is an ARIA role on the track, so
-       it is stable across versions, and the FILL is left alone entirely - it is
-       already the right green because config.toml sets primaryColor to the same
-       value as --accent. Nothing here can override the inline width Streamlit
-       uses to express the percentage. */
-    [data-testid="stProgress"] div[role="progressbar"] {
-        background-color: var(--surface-2) !important;
-    }
+    /* Was depth-counted: ".stProgress > div > div > div" (fill) and
+       "> div > div" (track). Depth is a guess about Streamlit's DOM and it was
+       off by one on deploy, so the TRACK got painted accent green and a 9% bar
+       rendered as 100% full. role="progressbar" is an ARIA role on the track, so
+       it is stable; the fill is left alone and is already the right green
+       because config.toml sets primaryColor to --accent. */
+    [data-testid="stProgress"] div[role="progressbar"] { background-color: var(--surface-2) !important; }
 
     .stTabs [data-baseweb="tab-list"] { gap: 20px; border-bottom: 1px solid var(--border); }
     .stTabs [data-baseweb="tab"] { color: var(--muted); font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; }
@@ -457,8 +411,8 @@ CUSTOM_CSS = """
         background: var(--surface) !important;
         border: 1px solid var(--border) !important;
         border-radius: 12px !important;
-        padding: var(--card-pad) !important;
-        margin-bottom: var(--card-gap) !important;
+        padding: 18px 20px !important;
+        margin-bottom: 16px !important;
         box-sizing: border-box !important;
     }
     /* Cards that sit side by side share a min-height, so the shorter one does
@@ -475,8 +429,8 @@ CUSTOM_CSS = """
        card. A flex row with space-between could not guarantee either. */
     .merchant-row {
         display: grid; grid-template-columns: 1fr auto; align-items: center;
-        gap: var(--gap); padding: 8px 0; border-bottom: 1px solid var(--border);
-        font-size: var(--fs-body);
+        gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border);
+        font-size: 12px;
     }
     .merchant-row:last-of-type { border-bottom: none; }
     .merchant-name { display: flex; align-items: center; gap: 9px; min-width: 0; }
