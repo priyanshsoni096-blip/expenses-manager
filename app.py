@@ -635,24 +635,31 @@ with st.sidebar:
                 st.rerun()
 
     # --- Profile card --------------------------------------------------------
-    # Pinned to the bottom of the sidebar with position:absolute + left/right
-    # rather than position:fixed + a hardcoded width:220px. The old version was
-    # measured against the viewport, not the sidebar, so dragging the sidebar
-    # wider or narrower left the card at 220px - either floating short of the
-    # edge or spilling over the main content.
-    #
-    # left/right instead of a width means the card always spans its container,
-    # whatever that container's width happens to be. If a Streamlit wrapper ever
-    # becomes the positioned ancestor instead of the sidebar itself, the card
-    # stops being bottom-pinned but stays correctly sized - it degrades to
-    # sitting in the flow rather than breaking the layout.
+    # Used to be position:absolute, pinned to the sidebar's bottom edge. That
+    # only avoids overlapping the nav buttons if the nav list's own natural
+    # height happens to leave enough room above wherever "bottom:16px" lands -
+    # it doesn't reserve space, it just floats over whatever's already there.
+    # On a shorter window/screen than this was checked on, the nav list ran
+    # into the same vertical space the card was pinned over, and "Edit name"
+    # rendered on top of "Categories". Flexbox instead: the sidebar's content
+    # column becomes the flex container, and margin-top:auto on the profile
+    # card pushes it as far down as the nav list's real height allows - never
+    # past it, never overlapping it, at any window size. The existing
+    # "div[data-testid=\"stVerticalBlock\"] > div" selector two rules above is
+    # already proven to hit each top-level sidebar element individually
+    # (that's what makes today's per-row spacing work), so this reuses that
+    # same selector rather than guessing a new one.
     st.markdown(
         "<style>"
-        'section[data-testid="stSidebar"] { position: relative !important; }'
+        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"],'
+        'section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {'
+        "  height: 100% !important;"
+        "}"
+        'section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {'
+        "  display: flex !important; flex-direction: column !important;"
+        "}"
         ".st-key-sidebar_profile {"
-        "  position: absolute !important; bottom: 16px !important;"
-        "  left: 12px !important; right: 12px !important;"
-        "  width: auto !important; box-sizing: border-box !important;"
+        "  margin-top: auto !important; box-sizing: border-box !important;"
         "}"
         ".sidebar-profile {"
         "  display: flex; align-items: center; gap: 10px;"
@@ -676,12 +683,6 @@ with st.sidebar:
         ".sidebar-profile-sub {"
         "  font-size: 10px; color: var(--muted);"
         "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
-        "}"
-        # Very short viewports: unpin so the card can't sit on top of the nav.
-        "@media (max-height: 520px) {"
-        "  .st-key-sidebar_profile {"
-        "    position: static !important; margin-top: 20px !important;"
-        "  }"
         "}"
         # "Edit name" reads as a small text link under the profile card,
         # not a full button - same visual weight the old static "View
@@ -1940,3 +1941,4 @@ elif page == "Categories":
                             st.rerun()
                         except Exception as e:
                             st.error(f"Couldn't delete: {e}")
+                            
