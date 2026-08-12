@@ -5,8 +5,6 @@ Dark terminal theme. Sidebar: Dashboard / Add Expense / History / Analytics / Ca
 
 Run with:
     streamlit run app.py
-    aa
-    
 
 Requires .streamlit/secrets.toml with a [firebase_service_account] section.
 """
