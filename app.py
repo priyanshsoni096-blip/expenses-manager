@@ -77,8 +77,6 @@ CUSTOM_CSS = """
         --gap:       clamp(8px, 0.85vw, 16px);
         --card-pad:  clamp(12px, 1.15vw, 20px);
         --card-gap:  clamp(10px, 1vw, 16px);
-        --chart-h:   clamp(200px, 22vw, 300px);
-        --chart-h-fs: clamp(320px, 40vw, 620px);
     }
 
     /* --- GLOBAL COLUMN BEHAVIOUR ------------------------------------------
@@ -90,9 +88,13 @@ CUSTOM_CSS = """
        Below 820px there is not enough room to shrink usefully, so wrapping is
        allowed again and columns go full width - a real stacked layout rather
        than an accidental one. */
+    /* NOTE: no `gap` is set here on purpose. Streamlit already spaces columns
+       by baking the spacing into each column's flex-basis. Adding a CSS gap on
+       top made the columns' widths plus the new gaps exceed 100% of the row, so
+       the last column pushed out past the row's right edge - which is what made
+       the Monthly Budget card overlap Quick Add. */
     [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
-        gap: var(--gap) !important;
     }
     [data-testid="stColumn"] {
         min-width: 0 !important;
@@ -244,18 +246,14 @@ CUSTOM_CSS = """
         font-size: 11px !important; min-height: 42px !important;
         padding: 6px 8px !important; overflow-wrap: anywhere !important;
     }
-    /* Charts: height comes from the fluid --chart-h tokens rather than the fixed
-       px handed to Plotly. With config responsive:true Plotly resizes itself to
-       its container, so a chart's aspect ratio stops drifting as the window
-       changes. The px value stays in the Plotly layout as a fallback in case
-       these selectors ever stop matching. */
+    /* Charts keep the height Plotly is given in Python. An earlier version forced
+       height here via --chart-h on .js-plotly-plot / .plot-container: the pie grew
+       to fill everything and the trend chart rendered empty, because those
+       elements are sized by Plotly's own layout engine and overriding them from
+       outside desynchronises the SVG viewport from its container. config
+       responsive:true is kept - that makes Plotly re-measure on resize, which is
+       the supported way to do this. */
     [data-testid="stPlotlyChart"] { width: 100% !important; }
-    [class*="st-key-chartbox_n"] [data-testid="stPlotlyChart"],
-    [class*="st-key-chartbox_n"] .js-plotly-plot,
-    [class*="st-key-chartbox_n"] .plot-container { height: var(--chart-h) !important; }
-    [class*="st-key-chartbox_f"] [data-testid="stPlotlyChart"],
-    [class*="st-key-chartbox_f"] .js-plotly-plot,
-    [class*="st-key-chartbox_f"] .plot-container { height: var(--chart-h-fs) !important; }
     .example-chip {
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 8px; padding: 6px 10px; font-size: 10.5px;
@@ -609,13 +607,6 @@ def stat_grid(cards: list) -> None:
     grid lets the browser choose how many fit.
     """
     st.markdown('<div class="stat-grid">' + "".join(cards) + "</div>", unsafe_allow_html=True)
-
-
-def chart_box(fullscreen: bool):
-    """Container whose class tells the stylesheet which fluid height to apply.
-    Two container keys rather than an inline style, because the height needs to be
-    a CSS custom property so it can respond to the viewport."""
-    return st.container(key="chartbox_fs" if fullscreen else "chartbox_n")
 
 
 def card(name: str):
@@ -1409,15 +1400,13 @@ if page == "Dashboard":
             chart_id, title, renderer = next(c for c in CHART_SPECS if c[0] == _fs)
             with card(f"chart_{chart_id}"):
                 chart_header(title, chart_id)
-                with chart_box(True):
-                    renderer(560)
+                renderer(560)
         else:
             for col, (chart_id, title, renderer) in zip(st.columns(2), CHART_SPECS):
                 with col:
                     with card(f"chart_{chart_id}"):
                         chart_header(title, chart_id)
-                        with chart_box(False):
-                            renderer(220)
+                        renderer(220)
 
         with card("recent"):
             st.markdown('<div class="section-card-title">Recent Expenses</div>', unsafe_allow_html=True)
@@ -2111,15 +2100,13 @@ elif page == "Analytics":
             chart_id, title, renderer = next(c for c in AN_TOP_CHARTS if c[0] == _an_fs)
             with card(chart_id):
                 chart_header(title, chart_id)
-                with chart_box(True):
-                    renderer(560)
+                renderer(560)
         else:
             for col, (chart_id, title, renderer) in zip(st.columns(2), AN_TOP_CHARTS):
                 with col:
                     with card(chart_id):
                         chart_header(title, chart_id)
-                        with chart_box(False):
-                            renderer(260)
+                        renderer(260)
 
         def _render_an_payment(height: int) -> None:
             pm_totals = storage.payment_mode_totals(a_filtered)
