@@ -58,6 +58,49 @@ CUSTOM_CSS = """
         --bg: #0B0E14; --surface: #12161F; --surface-2: #171C27; --border: #232A38;
         --text: #E6E9EF; --muted: #7C8494; --accent: #22C55E; --accent-soft: #16351F;
         --red: #F87171; --red-soft: #3A1A1A;
+
+        /* --- FLUID SCALE ---------------------------------------------------
+           Every size that affects layout is a clamp(min, preferred, max), so it
+           scales with the viewport instead of being one number chosen at one
+           window size. clamp() never goes below min or above max, so text stays
+           legible when narrow and stops growing when very wide.
+
+           The vw middle term is what makes it track the screen. Previously every
+           one of these was a fixed px value, which is why nothing adjusted. */
+        --fs-page-title: clamp(17px, 1.55vw, 26px);
+        --fs-page-sub:   clamp(11px, 0.95vw, 14px);
+        --fs-label:      clamp(9px, 0.78vw, 11px);
+        --fs-body:       clamp(11px, 0.92vw, 13.5px);
+        --fs-value:      clamp(15px, 1.35vw, 22px);
+        --fs-small:      clamp(9px, 0.72vw, 10.5px);
+
+        --gap:       clamp(8px, 0.85vw, 16px);
+        --card-pad:  clamp(12px, 1.15vw, 20px);
+        --card-gap:  clamp(10px, 1vw, 16px);
+        --chart-h:   clamp(200px, 22vw, 300px);
+        --chart-h-fs: clamp(320px, 40vw, 620px);
+    }
+
+    /* --- GLOBAL COLUMN BEHAVIOUR ------------------------------------------
+       Streamlit puts a min-width on every column, which is why a 4-column row
+       WRAPPED its last column onto a line of its own instead of the four simply
+       getting narrower. min-width:0 lets columns shrink proportionally, so a
+       [3,1] row stays 75/25 at every width - genuinely ratio-based.
+
+       Below 820px there is not enough room to shrink usefully, so wrapping is
+       allowed again and columns go full width - a real stacked layout rather
+       than an accidental one. */
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        gap: var(--gap) !important;
+    }
+    [data-testid="stColumn"] {
+        min-width: 0 !important;
+    }
+    [data-testid="stColumn"] > div { min-width: 0 !important; }
+    @media (max-width: 820px) {
+        [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
+        [data-testid="stColumn"] { flex: 1 1 100% !important; }
     }
     html { color-scheme: dark !important; }
     html, body, [class*="css"], .stApp, .stApp * {
@@ -184,7 +227,7 @@ CUSTOM_CSS = """
        padding left the Hindi row visibly taller than the English row. A shared
        min-height with centred content makes both rows match. */
     .chip-grid {
-        display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(clamp(120px, 11vw, 170px), 1fr));
         gap: 8px; width: 100%;
     }
     /* Header help button: wrap a long label tidily inside the box rather than
@@ -201,6 +244,18 @@ CUSTOM_CSS = """
         font-size: 11px !important; min-height: 42px !important;
         padding: 6px 8px !important; overflow-wrap: anywhere !important;
     }
+    /* Charts: height comes from the fluid --chart-h tokens rather than the fixed
+       px handed to Plotly. With config responsive:true Plotly resizes itself to
+       its container, so a chart's aspect ratio stops drifting as the window
+       changes. The px value stays in the Plotly layout as a fallback in case
+       these selectors ever stop matching. */
+    [data-testid="stPlotlyChart"] { width: 100% !important; }
+    [class*="st-key-chartbox_n"] [data-testid="stPlotlyChart"],
+    [class*="st-key-chartbox_n"] .js-plotly-plot,
+    [class*="st-key-chartbox_n"] .plot-container { height: var(--chart-h) !important; }
+    [class*="st-key-chartbox_f"] [data-testid="stPlotlyChart"],
+    [class*="st-key-chartbox_f"] .js-plotly-plot,
+    [class*="st-key-chartbox_f"] .plot-container { height: var(--chart-h-fs) !important; }
     .example-chip {
         background: var(--surface-2); border: 1px solid var(--border);
         border-radius: 8px; padding: 6px 10px; font-size: 10.5px;
@@ -224,10 +279,10 @@ CUSTOM_CSS = """
     @keyframes pulse-out { 0% { transform: scale(1); opacity:.6; } 100% { transform: scale(1.9); opacity:0; } }
 
     .section-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; }
-    .section-card-title { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
-    .section-label { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 4px 0 10px; }
-    .page-title { font-size: 22px; font-weight: 700; color: var(--text); }
-    .page-subtitle { font-size: 12.5px; color: var(--muted); margin-bottom: 20px; }
+    .section-card-title { font-size: var(--fs-label); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+    .section-label { font-size: var(--fs-label); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 4px 0 10px; }
+    .page-title { font-size: var(--fs-page-title); font-weight: 700; color: var(--text); }
+    .page-subtitle { font-size: var(--fs-page-sub); color: var(--muted); margin-bottom: 20px; }
     .tip-box { background: var(--accent-soft); border: 1px solid #1F4A2C; border-radius: 8px; padding: 10px 16px; font-size: 11.5px; color: #86EFAC; margin-bottom: 20px; display:inline-flex; align-items:center; gap:8px; }
     .tip-box b { color: var(--accent); letter-spacing: 0.08em; }
 
@@ -243,8 +298,8 @@ CUSTOM_CSS = """
        no measured pixel values anywhere. */
     .stat-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-        gap: 14px; width: 100%;
+        grid-template-columns: repeat(auto-fit, minmax(clamp(150px, 14vw, 210px), 1fr));
+        gap: var(--card-gap); width: 100%;
     }
     .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; width: 100%; box-sizing: border-box; min-height: 84px; }
     .stat-card-value, .stat-card-sub, .stat-card-label { overflow-wrap: anywhere; }
@@ -259,9 +314,9 @@ CUSTOM_CSS = """
         width: 100% !important;
     }
     .stat-card-icon { font-size: 18px; }
-    .stat-card-label { font-size: 10px; color: var(--muted); margin-top:6px; }
-    .stat-card-value { font-size: 19px; font-weight:700; color: var(--text); margin-top:2px; }
-    .stat-card-sub { font-size: 9.5px; color: var(--muted); margin-top:2px; }
+    .stat-card-label { font-size: var(--fs-label); color: var(--muted); margin-top:6px; }
+    .stat-card-value { font-size: var(--fs-value); font-weight:700; color: var(--text); margin-top:2px; }
+    .stat-card-sub { font-size: var(--fs-small); color: var(--muted); margin-top:2px; }
 
     .parsed-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-top: 10px; margin-bottom: 10px; }
     .parsed-num { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--accent-soft); color:var(--accent); font-size:11px; font-weight:700; margin-right:8px; }
@@ -404,8 +459,8 @@ CUSTOM_CSS = """
         background: var(--surface) !important;
         border: 1px solid var(--border) !important;
         border-radius: 12px !important;
-        padding: 18px 20px !important;
-        margin-bottom: 16px !important;
+        padding: var(--card-pad) !important;
+        margin-bottom: var(--card-gap) !important;
         box-sizing: border-box !important;
     }
     /* Cards that sit side by side share a min-height, so the shorter one does
@@ -422,8 +477,8 @@ CUSTOM_CSS = """
        card. A flex row with space-between could not guarantee either. */
     .merchant-row {
         display: grid; grid-template-columns: 1fr auto; align-items: center;
-        gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border);
-        font-size: 12px;
+        gap: var(--gap); padding: 8px 0; border-bottom: 1px solid var(--border);
+        font-size: var(--fs-body);
     }
     .merchant-row:last-of-type { border-bottom: none; }
     .merchant-name { display: flex; align-items: center; gap: 9px; min-width: 0; }
@@ -554,6 +609,13 @@ def stat_grid(cards: list) -> None:
     grid lets the browser choose how many fit.
     """
     st.markdown('<div class="stat-grid">' + "".join(cards) + "</div>", unsafe_allow_html=True)
+
+
+def chart_box(fullscreen: bool):
+    """Container whose class tells the stylesheet which fluid height to apply.
+    Two container keys rather than an inline style, because the height needs to be
+    a CSS custom property so it can respond to the viewport."""
+    return st.container(key="chartbox_fs" if fullscreen else "chartbox_n")
 
 
 def card(name: str):
@@ -741,37 +803,27 @@ with st.sidebar:
         # Streamlit called it. That element becomes a full-height flex column and
         # margin-top:auto does the rest. Nothing is measured or assumed here - no
         # brand height, no row count, no card height.
-        # min-height on an inner div was the last mistake: its ancestors do not
-        # fill the viewport, so adding min-height only made the CONTENT taller than
-        # the sidebar - the card dropped below the fold and the sidebar grew a
-        # scrollbar. Nothing is given an explicit height here now.
+        # DECISION: the card is no longer pinned to the sidebar bottom.
         #
-        # Instead the whole ancestor chain becomes a flex column that FILLS its
-        # parent (flex:1) and is allowed to shrink (min-height:0). :has() with a
-        # descendant selector matches every ancestor of the card at once, so the
-        # chain is complete without naming a single wrapper. The sidebar section
-        # supplies the only real height, and that height is the viewport.
-        'section[data-testid="stSidebar"] {'
-        "  display: flex !important; flex-direction: column !important;"
-        "  height: 100vh !important; max-height: 100vh !important;"
-        "}"
-        'section[data-testid="stSidebar"] div:has(.st-key-sidebar_profile) {'
-        "  display: flex !important; flex-direction: column !important;"
-        "  flex: 1 1 auto !important; min-height: 0 !important; max-width: 100% !important;"
-        "}"
-        # Children that are NOT ancestors of the card keep their natural height, so
-        # only the space above the card absorbs the slack.
-        'section[data-testid="stSidebar"] div:has(.st-key-sidebar_profile) > *:not(:has(.st-key-sidebar_profile)) {'
-        "  flex: 0 0 auto !important;"
-        "}"
-        # The rule above is deliberately broad, so pin the actual row elements
-        # back to their natural height. These selectors carry one more class than
-        # the chain above, so they win on specificity rather than order.
-        'section[data-testid="stSidebar"] [class*="st-key-navrow_"] {'
-        "  flex: 0 0 auto !important;"
-        "}"
+        # Four attempts at pinning it all failed for the same reason - each needed
+        # a fact about Streamlit's sidebar DOM that I could not verify from here:
+        #   1. position:absolute + bottom:16px   -> needed the sidebar to be the
+        #      positioned ancestor; it wasn't, so it pinned under the nav.
+        #   2. testid flex chain                 -> needed those testids to be the
+        #      real ancestors; they weren't.
+        #   3. vh spacer from estimated heights  -> my estimate was ~28px short, so
+        #      the card overflowed the fold.
+        #   4. :has() + min-height on an inner   -> made the CONTENT taller than the
+        #      sidebar, so the card went below the fold and the sidebar scrolled.
+        #
+        # Bottom-pinning is cosmetic. Being visible is not. The card now sits in
+        # normal flow directly after the nav, which needs no assumptions at all:
+        # it is always visible, can never overlap the nav, and grows downward
+        # safely when the name editor opens.
         ".st-key-sidebar_profile {"
-        "  margin-top: auto !important; width: 100% !important;"
+        # Was margin-top:auto, which only does anything inside a flex column.
+        # A plain margin needs nothing from the DOM.
+        "  margin-top: 20px !important; width: 100% !important;"
         "  background: var(--surface-2) !important;"
         "  border: 1px solid var(--border) !important; border-radius: 10px !important;"
         "  padding: 10px 12px !important; box-sizing: border-box !important;"
@@ -939,7 +991,7 @@ TABLE_CSS = (
     ".exp-row-wrap { container-type: inline-size; width: 100%; }"
     f".exp-grid {{ display: grid; grid-template-columns: {_EXP_GRID_TEMPLATE};"
     f"  gap: {_EXP_GRID_GAP}px; align-items: center; width: 100%; }}"
-    ".exp-cell { min-width: 0; padding: 10px 0; font-size: 12px; }"
+    ".exp-cell { min-width: 0; padding: 10px 0; font-size: var(--fs-body); }"
     ".exp-cell > * { min-width: 0; }"
     ".exp-merchant-name { font-size: 13px; font-weight: 600; overflow: hidden;"
     "  text-overflow: ellipsis; white-space: nowrap; }"
@@ -1308,7 +1360,7 @@ if page == "Dashboard":
                     showarrow=False, xref="paper", yref="paper",
                 )],
             )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "responsive": True})
 
         def _render_trend_chart(height: int) -> None:
             if month_df.empty:
@@ -1344,7 +1396,7 @@ if page == "Dashboard":
                     tickprefix="₹", separatethousands=True, rangemode="tozero",
                 ),
             )
-            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False, "responsive": True})
 
         CHART_SPECS = [
             ("category", "Spending by Category", _render_category_chart),
@@ -1357,13 +1409,15 @@ if page == "Dashboard":
             chart_id, title, renderer = next(c for c in CHART_SPECS if c[0] == _fs)
             with card(f"chart_{chart_id}"):
                 chart_header(title, chart_id)
-                renderer(560)
+                with chart_box(True):
+                    renderer(560)
         else:
             for col, (chart_id, title, renderer) in zip(st.columns(2), CHART_SPECS):
                 with col:
                     with card(f"chart_{chart_id}"):
                         chart_header(title, chart_id)
-                        renderer(220)
+                        with chart_box(False):
+                            renderer(220)
 
         with card("recent"):
             st.markdown('<div class="section-card-title">Recent Expenses</div>', unsafe_allow_html=True)
@@ -1868,7 +1922,29 @@ elif page == "History":
             render_expense_table(page_slice, "hist")
 
             if total_pages > 1:
-                nav_cols = st.columns([0.6] + [0.5] * total_pages + [0.6, 4])
+                # WINDOWED pagination. This was [0.6] + [0.5]*total_pages + [0.6, 4]:
+                # one column per page, unbounded. At 60 pages that is 63 columns of
+                # ~20px each, and Streamlit's inter-column gap does not shrink, so
+                # past roughly 20 pages the gaps alone exceeded the row width and it
+                # overflowed sideways.
+                #
+                # The window is a FIXED number of columns whatever the page count -
+                # first, last, and a few either side of the current page, with
+                # ellipses standing in for the rest.
+                _cur = st.session_state.hist_page_num
+                _around = 1
+                _shown = {1, total_pages}
+                _shown |= {q for q in range(_cur - _around, _cur + _around + 1)
+                           if 1 <= q <= total_pages}
+                page_slots = []
+                _prev = 0
+                for q in sorted(_shown):
+                    if q - _prev > 1:
+                        page_slots.append(None)      # ellipsis
+                    page_slots.append(q)
+                    _prev = q
+                # 2 arrows + the slots + the "showing x to y" caption.
+                nav_cols = st.columns([0.6] + [0.5] * len(page_slots) + [0.6, 4])
                 with nav_cols[0]:
                     if st.button("←", key="hist_prev", disabled=(st.session_state.hist_page_num <= 1), use_container_width=True):
                         st.session_state.hist_page_num -= 1; st.rerun()
@@ -1898,17 +1974,24 @@ elif page == "History":
                     "</style>",
                     unsafe_allow_html=True,
                 )
-                for p in range(1, total_pages + 1):
-                    with nav_cols[p]:
+                for slot_i, p in enumerate(page_slots, start=1):
+                    with nav_cols[slot_i]:
+                        if p is None:
+                            st.markdown(
+                                '<div style="text-align:center; color:var(--muted);'
+                                ' padding-top:10px;">…</div>',
+                                unsafe_allow_html=True,
+                            )
+                            continue
                         with st.container(key=f"pgrow_{p}"):
                             if st.button(str(p), key=f"hist_page_{p}", use_container_width=True) \
                                     and p != st.session_state.hist_page_num:
                                 st.session_state.hist_page_num = p
                                 st.rerun()
-                with nav_cols[total_pages + 1]:
+                with nav_cols[len(page_slots) + 1]:
                     if st.button("→", key="hist_next", disabled=(st.session_state.hist_page_num >= total_pages), use_container_width=True):
                         st.session_state.hist_page_num += 1; st.rerun()
-                with nav_cols[total_pages + 2]:
+                with nav_cols[len(page_slots) + 2]:
                     st.markdown(f'<div style="text-align:right; font-size:11px; color:var(--muted); padding-top:10px;">Showing {start + 1} to {min(start + PAGE_SIZE, len(filtered))} of {len(filtered)}</div>', unsafe_allow_html=True)
 
     if not filtered.empty:
@@ -1986,7 +2069,7 @@ elif page == "Analytics":
             fig = go.Figure(data=[go.Pie(labels=cat_totals_a.index, values=cat_totals_a.values, hole=0.62, marker=dict(colors=colors, line=dict(color="#12161F", width=2)), textinfo="none", hovertemplate="%{label}: ₹%{value:,.0f}<extra></extra>")])
             fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color="#E6E9EF"), showlegend=True, legend=dict(font=dict(size=10)), margin=dict(l=0,r=0,t=10,b=10), height=height,
                 annotations=[dict(text=f"₹{cat_totals_a.sum():,.0f}<br><span style='font-size:9px;color:#7C8494;'>Total</span>", x=0.5, y=0.5, font=dict(size=15, color="#E6E9EF"), showarrow=False)])
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "responsive": True})
 
         def _render_an_time(height: int) -> None:
             daily_a = a_filtered.groupby(a_filtered["date"].dt.date)["amount"].sum().sort_index()
@@ -2016,7 +2099,7 @@ elif page == "Analytics":
                     tickprefix="₹", separatethousands=True, rangemode="tozero",
                 ),
             )
-            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False, "responsive": True})
 
         AN_TOP_CHARTS = [
             ("an_category", "Expenses by Category", _render_an_category),
@@ -2028,13 +2111,15 @@ elif page == "Analytics":
             chart_id, title, renderer = next(c for c in AN_TOP_CHARTS if c[0] == _an_fs)
             with card(chart_id):
                 chart_header(title, chart_id)
-                renderer(560)
+                with chart_box(True):
+                    renderer(560)
         else:
             for col, (chart_id, title, renderer) in zip(st.columns(2), AN_TOP_CHARTS):
                 with col:
                     with card(chart_id):
                         chart_header(title, chart_id)
-                        renderer(260)
+                        with chart_box(False):
+                            renderer(260)
 
         def _render_an_payment(height: int) -> None:
             pm_totals = storage.payment_mode_totals(a_filtered)
@@ -2043,7 +2128,7 @@ elif page == "Analytics":
             fig3 = go.Figure(data=[go.Pie(labels=pm_totals.index, values=pm_totals.values, hole=0.62, marker=dict(colors=colors2, line=dict(color="#12161F", width=2)), textinfo="none", hovertemplate="%{label}: ₹%{value:,.0f}<extra></extra>")])
             fig3.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color="#E6E9EF"), showlegend=True, legend=dict(font=dict(size=10)), margin=dict(l=0,r=0,t=10,b=10), height=height,
                 annotations=[dict(text=f"₹{pm_totals.sum():,.0f}<br><span style='font-size:9px;color:#7C8494;'>Total</span>", x=0.5, y=0.5, font=dict(size=14, color="#E6E9EF"), showarrow=False)])
-            st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False, "responsive": True})
 
         def _render_an_merchants() -> None:
             st.markdown('<div class="section-card-title">Top Merchants</div>', unsafe_allow_html=True)
@@ -2180,7 +2265,7 @@ elif page == "Categories":
                 fig = go.Figure(data=[go.Pie(labels=cat_totals_all.index, values=cat_totals_all.values, hole=0.62, marker=dict(colors=colors, line=dict(color="#12161F", width=2)), textinfo="none", hovertemplate="%{label}: ₹%{value:,.0f}<extra></extra>")])
                 fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color="#E6E9EF"), showlegend=True, legend=dict(font=dict(size=10)), margin=dict(l=0,r=0,t=10,b=10), height=560 if is_fs else 280,
                     annotations=[dict(text=f"₹{total_all:,.0f}<br><span style='font-size:9px;color:#7C8494;'>Total</span>", x=0.5, y=0.5, font=dict(size=16, color="#E6E9EF"), showarrow=False)])
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "responsive": True})
     with tab2:
         with card("cat_insights"):
             if cat_totals_all.empty:
