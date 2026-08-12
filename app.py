@@ -275,8 +275,21 @@ CUSTOM_CSS = """
     .st-key-hist_filter_pay div[data-baseweb="select"]::before { content: "💳"; }
     .st-key-hist_search_box div[data-baseweb="input"]::before { content: "🔍"; }
 
-    .stProgress > div > div > div { background-color: var(--accent) !important; }
-    .stProgress > div > div { background-color: var(--surface-2) !important; }
+    /* Progress bar. These used to be depth-counted selectors:
+           .stProgress > div > div > div  -> fill
+           .stProgress > div > div        -> track
+       Depth is a GUESS about Streamlit's internal DOM, and it was off by one on
+       the deployed build: "> div > div > div" landed on the TRACK, painted the
+       whole bar accent green, and a 9% budget bar rendered as 100% full.
+
+       Now depth-independent. role="progressbar" is an ARIA role on the track, so
+       it is stable across versions, and the FILL is left alone entirely - it is
+       already the right green because config.toml sets primaryColor to the same
+       value as --accent. Nothing here can override the inline width Streamlit
+       uses to express the percentage. */
+    [data-testid="stProgress"] div[role="progressbar"] {
+        background-color: var(--surface-2) !important;
+    }
 
     .stTabs [data-baseweb="tab-list"] { gap: 20px; border-bottom: 1px solid var(--border); }
     .stTabs [data-baseweb="tab"] { color: var(--muted); font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; }
@@ -453,6 +466,34 @@ today = datetime.date.today()
 NAV_ITEMS = [("🏠", "Dashboard"), ("➕", "Add Expense"), ("📄", "History"), ("📊", "Analytics"), ("🏷️", "Categories")]
 if "page" not in st.session_state:
     st.session_state.page = "Dashboard"
+
+
+# Height of everything in the sidebar ABOVE the flexible gap. Derived from the
+# nav item count, so adding a page adjusts the gap automatically. Used to size a
+# real in-flow spacer in vh units, which is what actually pushes the profile card
+# to the bottom - margin-top:auto alone depends on Streamlit's wrapper divs
+# forming a flex column, and guessing that chain has failed on deploy.
+_SB_BRAND_PX = 130          # logo + 3-line wordmark + tagline + divider
+_SB_NAVROW_PX = 44          # 40px min-height + 4px margin, per row
+_SB_PROFILE_PX = 104        # profile card + "Edit name" link
+_SB_CHROME_PX = 60          # Streamlit's own sidebar padding, top and bottom
+
+
+def _sidebar_gap_css() -> str:
+    """CSS length for the flexible gap above the profile card.
+
+    max(0px, ...) so a short viewport collapses the gap instead of producing a
+    negative height and a scrollbar. Being a real element in normal flow, it can
+    only ever push the card down - it cannot cause an overlap the way the old
+    position:absolute card did.
+    """
+    above = (
+        _SB_BRAND_PX
+        + _SB_NAVROW_PX * len(NAV_ITEMS)
+        + _SB_PROFILE_PX
+        + _SB_CHROME_PX
+    )
+    return f"max(0px, calc(100vh - {above}px))"
 
 
 def _scroll_to_top(nonce: str) -> None:
@@ -662,31 +703,50 @@ with st.sidebar:
         # nav above it simply has less free space to absorb. The column chain is
         # depth-limited to three levels (BorderWrapper > div > stVerticalBlock)
         # so vertical blocks nested INSIDE the card are left alone.
-        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {'
+        # The flex chain below is a BEST EFFORT, not the mechanism. It only works
+        # if these wrapper testids exist and are the real ancestor chain, and that
+        # guess has already failed once on deploy (the card sat directly under the
+        # nav). The thing that actually positions the card is the vh-sized spacer
+        # element rendered just above it - see _sidebar_gap_css(). Several
+        # candidate selectors are listed so the flex path can also work wherever
+        # it happens to match; both mechanisms push the same direction, so if both
+        # apply the card still lands at the bottom and nothing overlaps.
+        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"],'
+        'section[data-testid="stSidebar"] [data-testid="stSidebarContent"],'
+        'section[data-testid="stSidebar"] > div,'
+        'section[data-testid="stSidebar"] > div > div {'
         "  display: flex !important; flex-direction: column !important;"
-        "  min-height: calc(100vh - 5rem) !important; max-width: 100% !important;"
+        "  max-width: 100% !important;"
         "}"
-        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div,'
-        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div > div,'
-        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div > div > div {'
-        "  display: flex !important; flex-direction: column !important;"
-        "  flex: 1 1 auto !important; min-height: 0 !important;"
+        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {'
+        "  min-height: calc(100vh - 5rem) !important;"
         "}"
         # The rule above is deliberately broad, so pin the actual row elements
         # back to their natural height. These selectors carry one more class than
         # the chain above, so they win on specificity rather than order.
-        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [class*="st-key-navrow_"],'
-        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] .st-key-sidebar_profile {'
+        'section[data-testid="stSidebar"] [class*="st-key-navrow_"],'
+        'section[data-testid="stSidebar"] .st-key-sidebar_profile,'
+        'section[data-testid="stSidebar"] .sidebar-flex-gap {'
         "  flex: 0 0 auto !important;"
         "}"
+        # The gap is allowed to grow if a flex parent does materialise, but its
+        # vh min-height is what does the work when none does.
+        'section[data-testid="stSidebar"] .sidebar-flex-gap { flex-grow: 1 !important; }'
         ".st-key-sidebar_profile {"
-        "  margin-top: auto !important; padding-top: 12px !important;"
-        "  width: 100% !important; box-sizing: border-box !important;"
+        "  margin-top: auto !important; width: 100% !important;"
+        "  background: var(--surface-2) !important;"
+        "  border: 1px solid var(--border) !important; border-radius: 10px !important;"
+        "  padding: 10px 12px !important; box-sizing: border-box !important;"
+        "}"
+        # The border/background moved from the inner .sidebar-profile row to the
+        # OUTER keyed container, so the "Edit name" link sits inside the same box
+        # instead of dangling underneath it as loose text.
+        ".st-key-sidebar_profile > div, .st-key-sidebar_profile > div > div {"
+        "  width: 100% !important;"
         "}"
         ".sidebar-profile {"
         "  display: flex; align-items: center; gap: 10px;"
-        "  padding: 10px 12px; background: var(--surface-2);"
-        "  border: 1px solid var(--border); border-radius: 10px;"
+        "  background: none; border: none; padding: 0;"
         "  box-sizing: border-box; width: 100%; min-width: 0;"
         "}"
         ".sidebar-profile-avatar {"
@@ -713,17 +773,24 @@ with st.sidebar:
         # "Edit name" reads as a small text link under the profile card,
         # not a full button - same visual weight the old static "View
         # Profile" caption had, since it's standing in for that line.
-        ".st-key-profile_edit_trigger { margin-top: 4px; }"
+        ".st-key-profile_edit_trigger { margin-top: 6px !important; }"
         ".st-key-profile_edit_trigger button {"
         "  background: transparent !important; border: none !important;"
         "  color: var(--muted) !important; font-size: 10px !important;"
-        "  padding: 0 12px !important; min-height: unset !important;"
+        "  padding: 0 !important; min-height: unset !important; text-align: left !important;"
         "  text-decoration: underline; text-decoration-color: transparent;"
         "}"
         ".st-key-profile_edit_trigger button:hover { color: var(--accent) !important; text-decoration-color: var(--accent) !important; }"
         "</style>",
         unsafe_allow_html=True,
     )
+    # This is what puts the profile card at the bottom: a real, in-flow element
+    # that grows with the viewport. No assumptions about Streamlit's DOM.
+    st.markdown(
+        f'<div class="sidebar-flex-gap" style="height:{_sidebar_gap_css()};"></div>',
+        unsafe_allow_html=True,
+    )
+
     with st.container(key="sidebar_profile"):
         user_name = get_user_name()
         editing_name = st.session_state.get("editing_profile_name", False)
