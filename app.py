@@ -446,14 +446,26 @@ CUSTOM_CSS = """
     [class*="st-key-card_"] [data-testid="stVerticalBlock"],
     [class*="st-key-card_"] [data-testid="stMarkdown"],
     [class*="st-key-card_"] [data-testid="stMarkdownContainer"],
+    [class*="st-key-card_"] div.stButton,
+    [class*="st-key-card_"] [data-testid="stTextInput"],
+    [class*="st-key-card_"] [data-testid="stTextArea"],
+    [class*="st-key-card_"] [data-testid="stNumberInput"],
     .st-key-type_input_box [data-testid="stElementContainer"],
     .st-key-type_input_box [data-testid="stVerticalBlock"],
     .st-key-type_input_box [data-testid="stMarkdown"],
     .st-key-type_input_box [data-testid="stMarkdownContainer"],
+    .st-key-type_input_box div.stButton,
+    .st-key-type_input_box [data-testid="stTextInput"],
+    .st-key-type_input_box [data-testid="stTextArea"],
+    .st-key-type_input_box [data-testid="stNumberInput"],
     .st-key-parsed_items_panel [data-testid="stElementContainer"],
     .st-key-parsed_items_panel [data-testid="stVerticalBlock"],
     .st-key-parsed_items_panel [data-testid="stMarkdown"],
-    .st-key-parsed_items_panel [data-testid="stMarkdownContainer"] {
+    .st-key-parsed_items_panel [data-testid="stMarkdownContainer"],
+    .st-key-parsed_items_panel div.stButton,
+    .st-key-parsed_items_panel [data-testid="stTextInput"],
+    .st-key-parsed_items_panel [data-testid="stTextArea"],
+    .st-key-parsed_items_panel [data-testid="stNumberInput"] {
         width: 100% !important; max-width: 100% !important; box-sizing: border-box !important;
     }
     /* Cards that sit side by side share a min-height, so the shorter one does
