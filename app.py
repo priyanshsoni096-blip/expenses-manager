@@ -10,6 +10,7 @@ Requires .streamlit/secrets.toml with a [firebase_service_account] section.
 """
 
 import datetime
+import math
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -635,31 +636,52 @@ with st.sidebar:
                 st.rerun()
 
     # --- Profile card --------------------------------------------------------
-    # Used to be position:absolute, pinned to the sidebar's bottom edge. That
-    # only avoids overlapping the nav buttons if the nav list's own natural
-    # height happens to leave enough room above wherever "bottom:16px" lands -
-    # it doesn't reserve space, it just floats over whatever's already there.
-    # On a shorter window/screen than this was checked on, the nav list ran
-    # into the same vertical space the card was pinned over, and "Edit name"
-    # rendered on top of "Categories". Flexbox instead: the sidebar's content
-    # column becomes the flex container, and margin-top:auto on the profile
-    # card pushes it as far down as the nav list's real height allows - never
-    # past it, never overlapping it, at any window size. The existing
-    # "div[data-testid=\"stVerticalBlock\"] > div" selector two rules above is
-    # already proven to hit each top-level sidebar element individually
-    # (that's what makes today's per-row spacing work), so this reuses that
-    # same selector rather than guessing a new one.
+    # Pinned to the bottom of the sidebar with position:absolute + left/right
+    # rather than position:fixed + a hardcoded width:220px. The old version was
+    # measured against the viewport, not the sidebar, so dragging the sidebar
+    # wider or narrower left the card at 220px - either floating short of the
+    # edge or spilling over the main content.
+    #
+    # left/right instead of a width means the card always spans its container,
+    # whatever that container's width happens to be. If a Streamlit wrapper ever
+    # becomes the positioned ancestor instead of the sidebar itself, the card
+    # stops being bottom-pinned but stays correctly sized - it degrades to
+    # sitting in the flow rather than breaking the layout.
     st.markdown(
         "<style>"
-        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"],'
-        'section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {'
-        "  height: 100% !important;"
-        "}"
-        'section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {'
+        # FIX: the card used position:absolute + bottom:16px. That required the
+        # sidebar to be the nearest positioned ancestor AND to have a real
+        # height - neither of which this file could guarantee, so on deploy it
+        # pinned to the bottom of the CONTENT (just under the nav) instead of the
+        # sidebar. Worse, absolute positioning takes the card OUT OF FLOW, so
+        # when the name editor opens and the card roughly doubles in height it
+        # grew upward from a fixed bottom edge and landed on top of "Categories".
+        #
+        # It is now IN FLOW, pushed down by margin-top:auto inside a full-height
+        # flex column. Being in flow means it can never overlap: if it grows, the
+        # nav above it simply has less free space to absorb. The column chain is
+        # depth-limited to three levels (BorderWrapper > div > stVerticalBlock)
+        # so vertical blocks nested INSIDE the card are left alone.
+        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {'
         "  display: flex !important; flex-direction: column !important;"
+        "  min-height: calc(100vh - 5rem) !important; max-width: 100% !important;"
+        "}"
+        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div,'
+        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div > div,'
+        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div > div > div {'
+        "  display: flex !important; flex-direction: column !important;"
+        "  flex: 1 1 auto !important; min-height: 0 !important;"
+        "}"
+        # The rule above is deliberately broad, so pin the actual row elements
+        # back to their natural height. These selectors carry one more class than
+        # the chain above, so they win on specificity rather than order.
+        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [class*="st-key-navrow_"],'
+        'section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] .st-key-sidebar_profile {'
+        "  flex: 0 0 auto !important;"
         "}"
         ".st-key-sidebar_profile {"
-        "  margin-top: auto !important; box-sizing: border-box !important;"
+        "  margin-top: auto !important; padding-top: 12px !important;"
+        "  width: 100% !important; box-sizing: border-box !important;"
         "}"
         ".sidebar-profile {"
         "  display: flex; align-items: center; gap: 10px;"
@@ -684,6 +706,10 @@ with st.sidebar:
         "  font-size: 10px; color: var(--muted);"
         "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
         "}"
+        # (The old @media (max-height: 520px) escape hatch is gone. It never
+        # matched a real laptop viewport, and margin-top:auto degrades safely on
+        # its own: if the flex chain does not apply, the card simply sits in flow
+        # directly after the nav rather than overlapping it.)
         # "Edit name" reads as a small text link under the profile card,
         # not a full button - same visual weight the old static "View
         # Profile" caption had, since it's standing in for that line.
@@ -758,13 +784,105 @@ PAYMENT_ICONS = {"Cash": "💵", "UPI": "📱", "Card": "💳", "Other": "🔘"}
 # mismatch at the source instead of nudging text to paper over it. The two
 # action buttons now share their one column via a CSS flex row (see
 # ACTION_PAIR_CSS below) instead of being separate top-level columns.
-_TABLE_COL_WEIGHTS = [1.3, 2.6, 1.6, 1.1, 1.2, 0.9]
-_TABLE_HEADERS = ["Date", "Merchant", "Category", "Amount", "Payment Mode", "Action"]
-_TABLE_HEADER_STYLES = [
-    "text-align:left;", "text-align:left;", "text-align:left;",
-    "text-align:left;", "text-align:left;",
-    "text-align:center;",
+# --- Expense table layout ----------------------------------------------------
+# This used to be six st.columns weighted [1.3, 2.6, 1.6, 1.1, 1.2, 0.9].
+# st.columns is a PURE RATIO with no floor: a 1.1 weight is 12.6% of the row at
+# any width, including widths where 12.6% is 86px and the number_input inside
+# needs 110px. Streamlit does not stack columns on narrow screens, so the widget
+# kept its intrinsic minimum and pushed out of its column. Measured, the old
+# layout broke below ~1050px of content width - which is a 1280px window with
+# the sidebar open, i.e. the deployed case.
+#
+# The five data cells are now ONE CSS grid inside a single markdown block, so
+# minmax() can hold a real minimum per column, and a media query reflows the row
+# to two lines before those minimums are ever violated. Only the two action
+# buttons remain a Streamlit column, because they must be real widgets.
+ACTION_COL_PX = 88          # width reserved for the pencil + trash pair
+ACTION_COL_GAP = 12         # matches the grid gap so header and rows align
+
+# (min, flexible share) per column. The minimums are the widths the widgets in
+# EDIT mode actually need, measured in JetBrains Mono at 12-13px.
+_EXP_GRID_COLUMNS = [
+    ("Date", 86, 1.15),
+    ("Merchant", 120, 2.40),
+    ("Category", 120, 1.60),
+    ("Amount", 78, 1.00),
+    ("Payment Mode", 84, 1.10),
 ]
+_EXP_GRID_GAP = 12
+_EXP_GRID_TEMPLATE = " ".join(
+    f"minmax({mn}px, {fr}fr)" for _, mn, fr in _EXP_GRID_COLUMNS
+)
+# Where the grid must reflow. Derived from the column spec above, so changing a
+# minimum or a share moves the breakpoint automatically - no magic number.
+#
+# The naive threshold is "sum of the minimums + gaps" (536px here), and a width
+# sweep proved that WRONG: minmax() clamps each column INDEPENDENTLY, so a column
+# with a small fr share reaches its minimum while the others still have slack, and
+# the clamped total then exceeds the container. Overflow appeared at 577-609px
+# with the naive figure.
+#
+# The real threshold is the narrowest width at which NO column clamps, i.e. where
+# avail * fr_i / sum(fr) >= min_i holds for every column. Solving for avail and
+# taking the worst column gives the bound below.
+_EXP_TOTAL_FR = sum(fr for _, _, fr in _EXP_GRID_COLUMNS)
+_EXP_GAPS_TOTAL = _EXP_GRID_GAP * (len(_EXP_GRID_COLUMNS) - 1)
+_EXP_GRID_MIN = math.ceil(
+    max(mn * _EXP_TOTAL_FR / fr for _, mn, fr in _EXP_GRID_COLUMNS)
+) + _EXP_GAPS_TOTAL
+_EXP_REFLOW_AT = _EXP_GRID_MIN + 16      # headroom so it flips before it strains
+
+TABLE_CSS = (
+    "<style>"
+    # A CONTAINER query, not a media query. A media query measures the viewport,
+    # which cannot tell whether the sidebar is open - at 1024px with the sidebar
+    # collapsed there is plenty of room, and with it open there is not. The
+    # container query measures the row itself, so it is right either way.
+    ".exp-row-wrap { container-type: inline-size; width: 100%; }"
+    f".exp-grid {{ display: grid; grid-template-columns: {_EXP_GRID_TEMPLATE};"
+    f"  gap: {_EXP_GRID_GAP}px; align-items: center; width: 100%; }}"
+    ".exp-cell { min-width: 0; padding: 10px 0; font-size: 12px; }"
+    ".exp-cell > * { min-width: 0; }"
+    ".exp-merchant-name { font-size: 13px; font-weight: 600; overflow: hidden;"
+    "  text-overflow: ellipsis; white-space: nowrap; }"
+    ".exp-merchant-note { font-size: 10.5px; color: var(--muted); margin-top: 2px;"
+    "  font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }"
+    ".exp-amount { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent); }"
+    # Header uses the same grid and the same container, so it cannot drift from
+    # the cells beneath it and it hides at exactly the same point they reflow.
+    ".exp-head .exp-cell { font-size: 10px; color: var(--muted); text-transform: uppercase;"
+    "  letter-spacing: 0.05em; font-weight: 700; padding: 0 0 8px;"
+    "  border-bottom: 1px solid var(--border); }"
+    ".exp-cell-label { display: none; }"
+    # Pin the action column to a fixed width; the grid column absorbs the rest.
+    # Scoped to exprowview_ so edit mode's own layout is untouched.
+    '[class*="st-key-exprowview_"] [data-testid="stHorizontalBlock"] {'
+    f"  flex-wrap: nowrap !important; gap: {ACTION_COL_GAP}px !important;"
+    "  align-items: start !important;"
+    "}"
+    '[class*="st-key-exprowview_"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {'
+    "  flex: 1 1 auto !important; min-width: 0 !important; width: auto !important;"
+    "}"
+    '[class*="st-key-exprowview_"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {'
+    f"  flex: 0 0 {ACTION_COL_PX}px !important; min-width: {ACTION_COL_PX}px !important;"
+    f"  width: {ACTION_COL_PX}px !important;"
+    "}"
+    # --- Narrow: reflow to two lines instead of overflowing -------------------
+    f"@container (max-width: {_EXP_REFLOW_AT}px) {{"
+    "  .exp-head { display: none !important; }"
+    "  .exp-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); row-gap: 4px; }"
+    "  .exp-cell { padding: 4px 0; }"
+    "  .exp-cell-merchant { grid-column: 1 / -1; order: -1; }"
+    "  .exp-cell-label { display: block; font-size: 9px; letter-spacing: 0.06em;"
+    "    text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }"
+    "  .exp-merchant-name, .exp-merchant-note { white-space: normal; }"
+    "}"
+    # Edit mode: two generous widget rows rather than five cramped columns.
+    '[class*="st-key-exprowedit_"] { padding: 6px 0 10px; }'
+    ".exp-edit-date { font-size: 11px; color: var(--muted); padding: 2px 0 6px; }"
+    "</style>"
+)
+
 
 # Puts the two buttons of an st.container(key=f"actionpair_...") side by
 # side. A nested st.columns(2) inside an already-narrow column was tried
@@ -773,31 +891,13 @@ _TABLE_HEADER_STYLES = [
 # the container's own children avoids nested columns entirely, so it stays
 # side-by-side at any width.
 #
-# Two earlier attempts at the CSS both silently matched nothing: a child
-# combinator (">") assuming stVerticalBlock was a direct child, then a plain
-# descendant selector assuming it was a real ancestor either way. Rather than
-# guess a third time which wrapper divs Streamlit inserts and in what order,
-# this collapses ALL of the known wrapper testids (proven to exist in this
-# app - see the stColumn/stVerticalBlock/stVerticalBlockBorderWrapper/
-# stElementContainer chain the stat-card width fix already relies on)
-# via display:contents, at any depth. That removes their boxes from layout
-# entirely regardless of how they're nested, so the two real div.stButton
-# elements end up as the direct, only flex items of the outer container -
-# which is flexed by matching the key class itself, not a descendant of it,
-# so it doesn't matter whether that class sits on the outermost wrapper or
-# something deeper.
+# display:contents on every known wrapper testid removes their boxes from
+# layout at any depth, so the two real div.stButton elements become the direct
+# flex items of the keyed container regardless of how Streamlit nests things.
 ACTION_PAIR_CSS = (
     "<style>"
     '[class*="st-key-actionpair_"] {'
     "  display: flex !important; flex-direction: row !important; gap: 6px !important;"
-    # Every other cell in the row wraps its content in a div with
-    # "padding:10px 0" (see c1-c5 above), which is what gives the row its
-    # breathing room from the divider above and below. The action buttons
-    # never got that padding - min-height:unset and the exprow rule that
-    # zeroes stElementContainer's own margin/padding (below) strip it
-    # entirely - so they sit flush against the line above them. Matching
-    # padding here puts them on the same vertical footing as every other
-    # column instead of looking un-padded specifically in this one slot.
     "  padding: 10px 0 !important;"
     "}"
     '[class*="st-key-actionpair_"] [data-testid="stVerticalBlockBorderWrapper"],'
@@ -810,44 +910,75 @@ ACTION_PAIR_CSS = (
 )
 
 
+def _exp_cell(label: str, inner: str, extra_class: str = "") -> str:
+    """One grid cell. data-label drives the inline field name shown when the row
+    reflows to two lines on a narrow screen."""
+    cls = f"exp-cell {extra_class}".strip()
+    return (
+        f'<div class="{cls}">'
+        f'<div class="exp-cell-label">{label}</div>'
+        f"{inner}</div>"
+    )
+
+
 def render_expense_table(df_slice, key_prefix):
     """Renders a header row plus one row per expense, with working edit (pencil)
     and delete (trash) actions. Shared by the Dashboard's Recent Expenses list
     and the History page's All Expenses table."""
+    st.markdown(TABLE_CSS, unsafe_allow_html=True)
     st.markdown(ACTION_PAIR_CSS, unsafe_allow_html=True)
-    header_cols = st.columns(_TABLE_COL_WEIGHTS)
-    for col, h, extra in zip(header_cols, _TABLE_HEADERS, _TABLE_HEADER_STYLES):
-        col.markdown(
-            '<div style="font-size:10px; color:var(--muted); text-transform:uppercase;'
-            ' letter-spacing:0.05em; font-weight:700; padding-bottom:8px;'
-            f' border-bottom:1px solid var(--border); {extra}">{h}</div>',
-            unsafe_allow_html=True,
-        )
+
+    # Header sits in the same two-part structure as a view row, so the grid
+    # columns line up with the cells beneath them by construction.
+    with st.container(key="exprowview_header"):
+        head_col, head_act = st.columns([8, 1])
+        with head_col:
+            st.markdown(
+                '<div class="exp-row-wrap"><div class="exp-grid exp-head">'
+                + "".join(
+                    f'<div class="exp-cell">{label}</div>'
+                    for label, _, _ in _EXP_GRID_COLUMNS
+                )
+                + "</div></div>",
+                unsafe_allow_html=True,
+            )
+        with head_act:
+            # No "Action" label: the pencil and trash icons need none, and a lone
+            # label left hanging after the other headers hide would read oddly.
+            st.markdown("", unsafe_allow_html=True)
 
     for idx, row in df_slice.iterrows():
         row_id = row.get("id", idx)
         edit_key = f"{key_prefix}_{row_id}"
         editing = st.session_state.get("editing_row") == edit_key
+        date_str = row["date"].strftime("%d %b %Y") if pd.notnull(row["date"]) else "—"
 
-        with st.container(key=f"exprow_{edit_key}"):
-            c1, c2, c3, c4, c5, c6 = st.columns(_TABLE_COL_WEIGHTS)
-            date_str = row["date"].strftime("%d %b %Y") if pd.notnull(row["date"]) else "—"
-            c1.markdown(f'<div style="padding:10px 0; font-size:12px;">📅&nbsp;{date_str}</div>', unsafe_allow_html=True)
-
-            if editing:
-                with c2:
-                    new_merchant = st.text_input("Merchant", value=row["merchant"], key=f"{edit_key}_merchant", label_visibility="collapsed")
-                with c3:
+        if editing:
+            # Edit mode gets its own layout: two roomy widget rows instead of
+            # five narrow columns. At 884px of content that is 434/434 on the
+            # first row and roughly 250/250/175 on the second - every widget
+            # comfortably above its minimum, and still fine down to ~630px.
+            with st.container(key=f"exprowedit_{edit_key}"):
+                st.markdown(
+                    f'<div class="exp-edit-date">📅&nbsp;{date_str}</div>',
+                    unsafe_allow_html=True,
+                )
+                ea1, ea2 = st.columns(2)
+                with ea1:
+                    new_merchant = st.text_input("Merchant", value=row["merchant"], key=f"{edit_key}_merchant")
+                with ea2:
                     cat_idx = CATEGORY_NAMES.index(row["category"]) if row["category"] in CATEGORY_NAMES else len(CATEGORY_NAMES) - 1
-                    new_cat = st.selectbox("Category", CATEGORY_NAMES, index=cat_idx, key=f"{edit_key}_cat", label_visibility="collapsed")
-                with c4:
-                    new_amount = st.number_input("Amount", value=float(row["amount"] or 0), key=f"{edit_key}_amt", label_visibility="collapsed", format="%.2f")
-                with c5:
+                    new_cat = st.selectbox("Category", CATEGORY_NAMES, index=cat_idx, key=f"{edit_key}_cat")
+                eb1, eb2, eb3 = st.columns([1, 1, 0.7])
+                with eb1:
+                    new_amount = st.number_input("Amount", value=float(row["amount"] or 0), key=f"{edit_key}_amt", format="%.2f")
+                with eb2:
                     pm_idx = PAYMENT_MODES.index(row["payment_mode"]) if row.get("payment_mode") in PAYMENT_MODES else 0
-                    new_pm = st.selectbox("Payment", PAYMENT_MODES, index=pm_idx, key=f"{edit_key}_pm", label_visibility="collapsed")
-                with c6:
+                    new_pm = st.selectbox("Payment Mode", PAYMENT_MODES, index=pm_idx, key=f"{edit_key}_pm")
+                with eb3:
+                    st.markdown('<div class="parsed-item-spacer">.</div>', unsafe_allow_html=True)
                     with st.container(key=f"actionpair_{edit_key}_edit"):
-                        if st.button("✓", key=f"{edit_key}_save"):
+                        if st.button("✓", key=f"{edit_key}_save", help="Save changes"):
                             try:
                                 storage.update_expense(row["id"], {
                                     "merchant": new_merchant, "category": new_cat,
@@ -857,31 +988,50 @@ def render_expense_table(df_slice, key_prefix):
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Couldn\'t save: {e}")
-                        if st.button("✕", key=f"{edit_key}_cancel"):
+                        if st.button("✕", key=f"{edit_key}_cancel", help="Discard changes"):
                             st.session_state.editing_row = None
                             st.rerun()
-            else:
-                note = row.get("notes") or ""
-                color = CATEGORY_COLORS.get(row["category"], "#9CA3AF")
-                icon = CATEGORY_ICONS.get(row["category"], "•")
-                pm_icon = PAYMENT_ICONS.get(row.get("payment_mode", "Cash"), "💵")
-                note_html = f'<div style="font-size:10.5px; color:var(--muted); margin-top:2px; font-style:italic;">{note}</div>' if note else ""
-                c2.markdown(f'<div style="padding:10px 0;"><div style="font-size:13px; font-weight:600;">{row["merchant"]}</div>{note_html}</div>', unsafe_allow_html=True)
-                c3.markdown(f'<div style="padding:10px 0;"><span class="stamp-tag" style="color:{color};">{icon}&nbsp;{row["category"]}</span></div>', unsafe_allow_html=True)
-                c4.markdown(f'<div style="padding:10px 0; font-family:monospace; font-weight:700; color:var(--accent);">₹{row["amount"]:,.2f}</div>', unsafe_allow_html=True)
-                c5.markdown(f'<div style="padding:10px 0; font-size:12px;">{pm_icon}&nbsp;{row.get("payment_mode", "Cash")}</div>', unsafe_allow_html=True)
-                with c6:
+        else:
+            note = row.get("notes") or ""
+            color = CATEGORY_COLORS.get(row["category"], "#9CA3AF")
+            icon = CATEGORY_ICONS.get(row["category"], "•")
+            pm_mode = row.get("payment_mode", "Cash")
+            pm_icon = PAYMENT_ICONS.get(pm_mode, "💵")
+            note_html = f'<div class="exp-merchant-note">{note}</div>' if note else ""
+
+            with st.container(key=f"exprowview_{edit_key}"):
+                grid_col, act_col = st.columns([8, 1])
+                with grid_col:
+                    st.markdown(
+                        '<div class="exp-row-wrap"><div class="exp-grid">'
+                        + _exp_cell("Date", f"📅&nbsp;{date_str}")
+                        + _exp_cell(
+                            "Merchant",
+                            f'<div class="exp-merchant-name">{row["merchant"]}</div>{note_html}',
+                            "exp-cell-merchant",
+                        )
+                        + _exp_cell(
+                            "Category",
+                            f'<span class="stamp-tag" style="color:{color};">{icon}&nbsp;{row["category"]}</span>',
+                        )
+                        + _exp_cell("Amount", f'<div class="exp-amount">₹{row["amount"]:,.2f}</div>')
+                        + _exp_cell("Payment Mode", f"{pm_icon}&nbsp;{pm_mode}")
+                        + "</div></div>",
+                        unsafe_allow_html=True,
+                    )
+                with act_col:
                     with st.container(key=f"actionpair_{edit_key}_view"):
-                        if st.button("✏️", key=f"{edit_key}_editbtn"):
+                        if st.button("✏️", key=f"{edit_key}_editbtn", help="Edit this expense"):
                             st.session_state.editing_row = edit_key
                             st.rerun()
-                        if st.button("🗑️", key=f"{edit_key}_delbtn"):
+                        if st.button("🗑️", key=f"{edit_key}_delbtn", help="Delete this expense"):
                             try:
                                 storage.delete_expense(row["id"])
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Couldn\'t delete: {e}")
-            st.markdown('<div style="border-top:1px solid var(--border); margin:2px 0 4px;"></div>', unsafe_allow_html=True)
+
+        st.markdown('<div style="border-top:1px solid var(--border); margin:2px 0 4px;"></div>', unsafe_allow_html=True)
 
 
 EXAMPLE_EN = "500 at McDonald's and 200 for shopping"
@@ -1941,4 +2091,3 @@ elif page == "Categories":
                             st.rerun()
                         except Exception as e:
                             st.error(f"Couldn't delete: {e}")
-                            
