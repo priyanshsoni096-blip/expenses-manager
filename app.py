@@ -174,11 +174,12 @@ CUSTOM_CSS = """
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div[data-testid="stVerticalBlock"] > .st-key-sidebar_profile {
         margin-top: auto !important;
     }
-    /* Belt-and-suspenders: forbid the sidebar from scrolling. If the flex math
-       above ever fails on some build, the nav simply clips rather than adding a
-       scrollbar - which is the lesser evil and matches "sidebar shouldn't
-       scroll". */
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { overflow-y: hidden !important; }
+    /* The sidebar should not show a horizontal scrollbar. Vertical is left at
+       its default (auto) so that on a genuinely tiny window the profile can
+       still be reached by scrolling rather than being clipped off - clipping
+       the profile entirely is worse than a rare scrollbar. In normal windows
+       the flex column fits without scrolling anyway. */
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { overflow-x: hidden !important; }
     section[data-testid="stSidebar"] [class*="st-key-navrow_"],
     section[data-testid="stSidebar"] [class*="st-key-navrow_"] > div,
     section[data-testid="stSidebar"] [class*="st-key-navrow_"] div.stButton,
@@ -446,43 +447,6 @@ CUSTOM_CSS = """
        stray empty separator lines under the last merchant. */
     .st-key-card_quickadd, .st-key-card_budget { min-height: 198px !important; }
     .st-key-card_an_payment, .st-key-card_an_merchants { min-height: 322px !important; }
-
-    /* --- App-wide card overflow fix ----------------------------------------
-       Content inside a card (the section-title divider, text inputs, buttons,
-       progress bars) was bleeding PAST the card's right border. Cause: the card
-       has padding (18px 20px), but Streamlit computes several of its inner
-       block wrappers at a flat width:100% that ignores that padding - so a
-       full-width child comes out 40px wider than the space between the card's
-       left and right padding and spills over the right edge. Forcing every
-       inner block/element wrapper to max-width:100% + border-box keeps children
-       within the padded content box instead of overrunning it. Scoped to the
-       three card types so it can't disturb the stat-grid or sidebar layout. */
-    [class*="st-key-card_"] [data-testid="stVerticalBlock"],
-    [class*="st-key-card_"] [data-testid="stHorizontalBlock"],
-    [class*="st-key-card_"] [data-testid="stElementContainer"],
-    [class*="st-key-card_"] [data-testid="stMarkdownContainer"],
-    [class*="st-key-card_"] .stTextInput,
-    [class*="st-key-card_"] .stTextArea,
-    [class*="st-key-card_"] .stNumberInput,
-    [class*="st-key-card_"] div.stButton,
-    [class*="st-key-card_"] div.stButton button,
-    [class*="st-key-card_"] [data-testid="stProgress"],
-    .st-key-type_input_box [data-testid="stVerticalBlock"],
-    .st-key-type_input_box [data-testid="stElementContainer"],
-    .st-key-type_input_box .stTextArea,
-    .st-key-parsed_items_panel [data-testid="stVerticalBlock"],
-    .st-key-parsed_items_panel [data-testid="stElementContainer"] {
-        max-width: 100% !important; box-sizing: border-box !important;
-    }
-    /* The section-title divider (border-bottom under "QUICK ADD EXPENSE" etc.)
-       is a block element, so it stretches edge-to-edge of its container. Inside
-       a padded card that container is already the content box, so 100% is
-       correct - but belt-and-suspenders it to never exceed it. */
-    [class*="st-key-card_"] .section-card-title,
-    .st-key-type_input_box .section-card-title,
-    .st-key-parsed_items_panel .section-card-title {
-        max-width: 100% !important; box-sizing: border-box !important;
-    }
 
     /* --- Top Merchants rows -------------------------------------------------
        grid-template-columns: 1fr auto pins the amount to the right edge of the
@@ -872,9 +836,12 @@ with st.sidebar:
                     st.session_state.editing_profile_name = False
                     st.rerun()
         else:
-            # Only the avatar + name now - the "View Profile" caption line was
-            # removed because the edit button below kept colliding with it under
-            # the sidebar's tight spacing. The edit button IS the second line now.
+            # Avatar + name, and the Edit button, ALL inside this one
+            # sidebar_profile container - so the flexbox margin-top:auto pins
+            # the whole profile section to the bottom as a single unit, rather
+            # than the card pinning while a separate Edit button dangles below
+            # it with a gap. The nav items stay up top; only this whole block
+            # drops to the bottom.
             st.markdown(
                 '<div class="sidebar-profile">'
                 f'<div class="sidebar-profile-avatar">{_initials(user_name)}</div>'
