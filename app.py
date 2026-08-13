@@ -10,7 +10,6 @@ Requires .streamlit/secrets.toml with a [firebase_service_account] section.
 """
 
 import datetime
-import math
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -25,6 +24,8 @@ from streamlit_mic_recorder import mic_recorder
 st.set_page_config(page_title="Smart Expense Tracker", page_icon="💰", layout="wide", initial_sidebar_state="expanded")
 
 PAYMENT_MODES = ["Cash", "UPI", "Card", "Other"]
+
+USER_NAME = "Priyansh"
 
 
 def _initials(name: str) -> str:
@@ -58,34 +59,6 @@ CUSTOM_CSS = """
         --bg: #0B0E14; --surface: #12161F; --surface-2: #171C27; --border: #232A38;
         --text: #E6E9EF; --muted: #7C8494; --accent: #22C55E; --accent-soft: #16351F;
         --red: #F87171; --red-soft: #3A1A1A;
-
-        /* --- FLUID SCALE ---------------------------------------------------
-           Sizes that affect layout are clamp(min, preferred, max) so they scale
-           with the viewport instead of being one number picked at one window
-           size. The vw middle term tracks the screen; min/max stop it becoming
-           unreadable or absurd. */
-        --fs-page-title: clamp(17px, 1.55vw, 26px);
-        --fs-page-sub:   clamp(11px, 0.95vw, 14px);
-        --fs-label:      clamp(9px, 0.78vw, 11px);
-        --fs-body:       clamp(11px, 0.92vw, 13.5px);
-        --fs-value:      clamp(15px, 1.35vw, 22px);
-        --fs-small:      clamp(9px, 0.72vw, 10.5px);
-        --gap:       clamp(8px, 0.85vw, 16px);
-        --card-pad:  clamp(12px, 1.15vw, 20px);
-        --card-gap:  clamp(10px, 1vw, 16px);
-    }
-
-    /* --- Narrow screens: stack columns -------------------------------------
-       The only global column rule. Two others (flex-wrap:nowrap and min-width:0
-       on every column) were tried and removed: they made the widgets inside a
-       card render wider than the card, spilling ~30px past its right border,
-       because shrinking a column below Streamlit's intended minimum
-       desynchronises the column box from the element widths Streamlit computes
-       for its contents. The stat-card wrap they were meant to fix is handled by
-       .stat-grid instead, which does not use st.columns at all. */
-    @media (max-width: 820px) {
-        [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; }
-        [data-testid="stColumn"] { flex: 1 1 100% !important; }
     }
     html { color-scheme: dark !important; }
     html, body, [class*="css"], .stApp, .stApp * {
@@ -154,29 +127,6 @@ CUSTOM_CSS = """
        inherited that narrower width. Percentages, not fixed pixels, so this
        tracks any sidebar width. */
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { max-width: 100% !important; }
-    /* --- Sidebar layout: nav on top, profile pinned to the bottom -----------
-       RESTORED from the pre-deploy version that worked. The sidebar is the
-       positioned ancestor (position:relative) and the profile card is
-       position:absolute; bottom:16px, spanning left/right so it tracks the
-       sidebar width. This was replaced with a flexbox height:100% approach
-       during debugging, which (a) forced heights onto Streamlit's column
-       wrappers, throwing off the width calc that makes card content overflow,
-       and (b) repeatedly collapsed or hid the nav. Absolute positioning
-       touches nothing about the flow, so it can't cause either problem. On a
-       very short viewport it un-pins (see the @media below) so it can't land
-       on top of the nav. */
-    section[data-testid="stSidebar"] { position: relative !important; }
-    .st-key-sidebar_profile {
-        position: absolute !important; bottom: 16px !important;
-        left: 12px !important; right: 12px !important;
-        width: auto !important; box-sizing: border-box !important;
-    }
-    @media (max-height: 600px) {
-        .st-key-sidebar_profile {
-            position: static !important; margin-top: 20px !important;
-            left: auto !important; right: auto !important;
-        }
-    }
     section[data-testid="stSidebar"] [class*="st-key-navrow_"],
     section[data-testid="stSidebar"] [class*="st-key-navrow_"] > div,
     section[data-testid="stSidebar"] [class*="st-key-navrow_"] div.stButton,
@@ -257,34 +207,13 @@ CUSTOM_CSS = """
     @keyframes pulse-out { 0% { transform: scale(1); opacity:.6; } 100% { transform: scale(1.9); opacity:0; } }
 
     .section-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; }
-    .section-card-title { font-size: var(--fs-label); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
-    .section-label { font-size: var(--fs-label); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 4px 0 10px; }
-    .page-title { font-size: var(--fs-page-title); font-weight: 700; color: var(--text); }
-    .page-subtitle { font-size: var(--fs-page-sub); color: var(--muted); margin-bottom: 20px; }
+    .section-card-title { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+    .section-label { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 4px 0 10px; }
+    .page-title { font-size: 22px; font-weight: 700; color: var(--text); }
+    .page-subtitle { font-size: 12.5px; color: var(--muted); margin-bottom: 20px; }
     .tip-box { background: var(--accent-soft); border: 1px solid #1F4A2C; border-radius: 8px; padding: 10px 16px; font-size: 11.5px; color: #86EFAC; margin-bottom: 20px; display:inline-flex; align-items:center; gap:8px; }
     .tip-box b { color: var(--accent); letter-spacing: 0.08em; }
 
-    /* Stat cards were st.columns(4). st.columns is a FIXED count: four columns
-       stay four at every width, and when they no longer fit Streamlit wraps the
-       last one onto a full-width row of its own. auto-fit hands the decision to
-       the browser: as many columns as actually fit, remainder shared evenly. */
-    .stat-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(clamp(150px, 14vw, 210px), 1fr));
-        gap: var(--card-gap); width: 100%;
-    }
-    .stat-card-value, .stat-card-sub, .stat-card-label { overflow-wrap: anywhere; }
-    .chip-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(clamp(120px, 11vw, 170px), 1fr));
-        gap: 8px; width: 100%;
-    }
-    [data-testid="stPlotlyChart"] { width: 100% !important; }
-    /* Header help button: wrap a long label inside its box instead of stretching it. */
-    [class*="st-key-how_it_works_wrap"] div.stButton button {
-        white-space: normal !important; line-height: 1.35 !important;
-        min-height: 44px !important; padding: 8px 12px !important; font-size: 12px !important;
-    }
     .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; width: 100%; box-sizing: border-box; min-height: 84px; }
     /* Force every wrapper layer between the column and our card to actually stretch —
        Streamlit's own containers otherwise shrink-wrap to content, so a card with more
@@ -297,9 +226,9 @@ CUSTOM_CSS = """
         width: 100% !important;
     }
     .stat-card-icon { font-size: 18px; }
-    .stat-card-label { font-size: var(--fs-label); color: var(--muted); margin-top:6px; }
-    .stat-card-value { font-size: var(--fs-value); font-weight:700; color: var(--text); margin-top:2px; }
-    .stat-card-sub { font-size: var(--fs-small); color: var(--muted); margin-top:2px; }
+    .stat-card-label { font-size: 10px; color: var(--muted); margin-top:6px; }
+    .stat-card-value { font-size: 19px; font-weight:700; color: var(--text); margin-top:2px; }
+    .stat-card-sub { font-size: 9.5px; color: var(--muted); margin-top:2px; }
 
     .parsed-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-top: 10px; margin-bottom: 10px; }
     .parsed-num { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--accent-soft); color:var(--accent); font-size:11px; font-weight:700; margin-right:8px; }
@@ -347,13 +276,8 @@ CUSTOM_CSS = """
     .st-key-hist_filter_pay div[data-baseweb="select"]::before { content: "💳"; }
     .st-key-hist_search_box div[data-baseweb="input"]::before { content: "🔍"; }
 
-    /* Was depth-counted: ".stProgress > div > div > div" (fill) and
-       "> div > div" (track). Depth is a guess about Streamlit's DOM and it was
-       off by one on deploy, so the TRACK got painted accent green and a 9% bar
-       rendered as 100% full. role="progressbar" is an ARIA role on the track, so
-       it is stable; the fill is left alone and is already the right green
-       because config.toml sets primaryColor to --accent. */
-    [data-testid="stProgress"] div[role="progressbar"] { background-color: var(--surface-2) !important; }
+    .stProgress > div > div > div { background-color: var(--accent) !important; }
+    .stProgress > div > div { background-color: var(--surface-2) !important; }
 
     .stTabs [data-baseweb="tab-list"] { gap: 20px; border-bottom: 1px solid var(--border); }
     .stTabs [data-baseweb="tab"] { color: var(--muted); font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; }
@@ -438,42 +362,6 @@ CUSTOM_CSS = """
         margin-bottom: 16px !important;
         box-sizing: border-box !important;
     }
-    /* Card content overflow - ROOT CAUSE (confirmed via inspect): Streamlit
-       hardcodes a fixed pixel width on the inner wrappers - an HTML width="370"
-       attribute on stElementContainer/stVerticalBlock AND style="width:370px"
-       on stMarkdown. 370px is the COLUMN width, but this card's content box is
-       only 370 - 40 = 330px after its 18px/20px padding, so every 370px child
-       overflows the right border by ~40px. The fix must override that fixed
-       width back to 100% (of the padded content box) on exactly the wrappers
-       Streamlit pins. width:100% + box-sizing wins over the width attribute and
-       the inline style because of !important. Scoped to inside cards so normal
-       column layouts (stat grid, etc.) keep their intended fixed widths. */
-    [class*="st-key-card_"] [data-testid="stElementContainer"],
-    [class*="st-key-card_"] [data-testid="stVerticalBlock"],
-    [class*="st-key-card_"] [data-testid="stMarkdown"],
-    [class*="st-key-card_"] [data-testid="stMarkdownContainer"],
-    [class*="st-key-card_"] div.stButton,
-    [class*="st-key-card_"] [data-testid="stTextInput"],
-    [class*="st-key-card_"] [data-testid="stTextArea"],
-    [class*="st-key-card_"] [data-testid="stNumberInput"],
-    .st-key-type_input_box [data-testid="stElementContainer"],
-    .st-key-type_input_box [data-testid="stVerticalBlock"],
-    .st-key-type_input_box [data-testid="stMarkdown"],
-    .st-key-type_input_box [data-testid="stMarkdownContainer"],
-    .st-key-type_input_box div.stButton,
-    .st-key-type_input_box [data-testid="stTextInput"],
-    .st-key-type_input_box [data-testid="stTextArea"],
-    .st-key-type_input_box [data-testid="stNumberInput"],
-    .st-key-parsed_items_panel [data-testid="stElementContainer"],
-    .st-key-parsed_items_panel [data-testid="stVerticalBlock"],
-    .st-key-parsed_items_panel [data-testid="stMarkdown"],
-    .st-key-parsed_items_panel [data-testid="stMarkdownContainer"],
-    .st-key-parsed_items_panel div.stButton,
-    .st-key-parsed_items_panel [data-testid="stTextInput"],
-    .st-key-parsed_items_panel [data-testid="stTextArea"],
-    .st-key-parsed_items_panel [data-testid="stNumberInput"] {
-        width: 100% !important; max-width: 100% !important; box-sizing: border-box !important;
-    }
     /* Cards that sit side by side share a min-height, so the shorter one does
        not leave a ragged bottom edge on the row. This replaces the old trick of
        padding the Top Merchants list with blank rows, which produced those
@@ -547,19 +435,6 @@ def get_expenses_df() -> pd.DataFrame:
         return pd.DataFrame(columns=["id", "date", "raw_text", "merchant", "amount", "category", "source", "payment_mode", "account", "notes"])
 
 
-def get_user_name() -> str:
-    """Returns the saved display name for the sidebar/greeting, "" if never
-    set. Cached in session_state - it's read on every single rerun (the
-    sidebar renders on every page), so without caching this would fire a
-    Firestore read on every rerun just to redraw the same name."""
-    if "user_name" not in st.session_state:
-        try:
-            st.session_state.user_name = storage.get_user_name()
-        except Exception:
-            st.session_state.user_name = ""
-    return st.session_state.user_name
-
-
 df = get_expenses_df()
 today = datetime.date.today()
 
@@ -597,29 +472,6 @@ def _scroll_to_top(nonce: str) -> None:
         "</script>",
         height=0,
     )
-
-
-def stat_card(label: str, value: str, sub: str = "", icon: str = "", value_html: str = "") -> str:
-    """HTML for one stat card. Returns markup rather than rendering, so a whole
-    row can be emitted as a single grid - see stat_grid()."""
-    parts = []
-    if icon:
-        parts.append(f'<div class="stat-card-icon">{icon}</div>')
-    parts.append(f'<div class="stat-card-label">{label}</div>')
-    parts.append(value_html or f'<div class="stat-card-value">{value}</div>')
-    if sub:
-        parts.append(f'<div class="stat-card-sub">{sub}</div>')
-    return '<div class="stat-card">' + "".join(parts) + "</div>"
-
-
-def stat_grid(cards: list) -> None:
-    """Render stat cards as one auto-fitting CSS grid.
-
-    Deliberately NOT st.columns(len(cards)): that pins the column count, so on a
-    narrower window the last card wrapped onto a full-width row of its own. The
-    grid lets the browser choose how many fit.
-    """
-    st.markdown('<div class="stat-grid">' + "".join(cards) + "</div>", unsafe_allow_html=True)
 
 
 def card(name: str):
@@ -772,38 +624,29 @@ with st.sidebar:
                 st.rerun()
 
     # --- Profile card --------------------------------------------------------
-    # Pinned to the sidebar bottom by position:absolute (the rule up in
-    # CUSTOM_CSS). This block only styles the card's own box (bg/border/padding)
-    # and the Edit button inside it. The card contains BOTH the avatar+name row
-    # and the Edit button, so the whole profile unit pins together.
+    # Pinned to the bottom of the sidebar with position:absolute + left/right
+    # rather than position:fixed + a hardcoded width:220px. The old version was
+    # measured against the viewport, not the sidebar, so dragging the sidebar
+    # wider or narrower left the card at 220px - either floating short of the
+    # edge or spilling over the main content.
+    #
+    # left/right instead of a width means the card always spans its container,
+    # whatever that container's width happens to be. If a Streamlit wrapper ever
+    # becomes the positioned ancestor instead of the sidebar itself, the card
+    # stops being bottom-pinned but stays correctly sized - it degrades to
+    # sitting in the flow rather than breaking the layout.
     st.markdown(
         "<style>"
+        'section[data-testid="stSidebar"] { position: relative !important; }'
         ".st-key-sidebar_profile {"
-        "  width: auto !important;"
-        "  background: var(--surface-2) !important;"
-        "  border: 1px solid var(--border) !important; border-radius: 10px !important;"
-        "  padding: 10px 12px !important; box-sizing: border-box !important;"
-        "}"
-        # The border/background moved from the inner .sidebar-profile row to the
-        # OUTER keyed container, so the "Edit name" link sits inside the same box
-        # instead of dangling underneath it as loose text.
-        ".st-key-sidebar_profile > div, .st-key-sidebar_profile > div > div {"
-        "  width: 100% !important;"
-        "}"
-        # The sidebar's global tightening rules (margin:0, collapsed gaps) were
-        # stacking the "Edit name" button on top of the profile markdown above
-        # it - they render as two separate sidebar elements and the collapse
-        # left no space between them. Forcing a real top margin on the edit
-        # button's OWN wrapper (its keyed container, a stable hook) reserves
-        # that space back regardless of the global collapse. !important because
-        # it's overriding those same global margin:0 !important rules.
-        ".st-key-profile_edit_trigger {"
-        "  margin-top: 8px !important; padding-top: 8px !important;"
-        "  border-top: 1px solid var(--border) !important; width: 100% !important;"
+        "  position: absolute !important; bottom: 16px !important;"
+        "  left: 12px !important; right: 12px !important;"
+        "  width: auto !important; box-sizing: border-box !important;"
         "}"
         ".sidebar-profile {"
         "  display: flex; align-items: center; gap: 10px;"
-        "  background: none; border: none; padding: 0;"
+        "  padding: 10px 12px; background: var(--surface-2);"
+        "  border: 1px solid var(--border); border-radius: 10px;"
         "  box-sizing: border-box; width: 100%; min-width: 0;"
         "}"
         ".sidebar-profile-avatar {"
@@ -823,67 +666,25 @@ with st.sidebar:
         "  font-size: 10px; color: var(--muted);"
         "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
         "}"
-        # "Edit name" reads as a small text link under the profile card,
-        # not a full button - same visual weight the old static "View
-        # Profile" caption had, since it's standing in for that line.
-        ".st-key-profile_edit_trigger button {"
-        "  background: transparent !important; border: none !important;"
-        "  color: var(--muted) !important; font-size: 10px !important;"
-        "  padding: 0 !important; min-height: unset !important; text-align: left !important;"
-        "  text-decoration: underline; text-decoration-color: transparent;"
+        # Very short viewports: unpin so the card can't sit on top of the nav.
+        "@media (max-height: 520px) {"
+        "  .st-key-sidebar_profile {"
+        "    position: static !important; margin-top: 20px !important;"
+        "  }"
         "}"
-        ".st-key-profile_edit_trigger button:hover { color: var(--accent) !important; text-decoration-color: var(--accent) !important; }"
         "</style>",
         unsafe_allow_html=True,
     )
     with st.container(key="sidebar_profile"):
-        user_name = get_user_name()
-        editing_name = st.session_state.get("editing_profile_name", False)
-
-        if not user_name and not editing_name:
-            # First run in this Firestore project: nobody's set a name yet.
-            # Same doc a returning user would edit (see below) - this is
-            # just that same flow with nothing to show instead of a name.
-            st.session_state.editing_profile_name = True
-            st.rerun()
-
-        if editing_name:
-            new_name = st.text_input("Your name", value=user_name, key="profile_name_input", placeholder="What should we call you?", label_visibility="collapsed")
-            save_col, cancel_col = st.columns(2)
-            with save_col:
-                if st.button("Save", key="profile_name_save", use_container_width=True) and new_name.strip():
-                    try:
-                        storage.set_user_name(new_name.strip())
-                        st.session_state.user_name = new_name.strip()
-                        st.session_state.editing_profile_name = False
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Couldn't save: {e}")
-            with cancel_col:
-                # Only offer Cancel once a name already exists - on first run
-                # there's nothing to cancel back to.
-                if user_name and st.button("Cancel", key="profile_name_cancel", use_container_width=True):
-                    st.session_state.editing_profile_name = False
-                    st.rerun()
-        else:
-            # Avatar + name, and the Edit button, ALL inside this one
-            # sidebar_profile container - so the flexbox margin-top:auto pins
-            # the whole profile section to the bottom as a single unit, rather
-            # than the card pinning while a separate Edit button dangles below
-            # it with a gap. The nav items stay up top; only this whole block
-            # drops to the bottom.
-            st.markdown(
-                '<div class="sidebar-profile">'
-                f'<div class="sidebar-profile-avatar">{_initials(user_name)}</div>'
-                '<div class="sidebar-profile-text">'
-                f'<div class="sidebar-profile-name" title="{user_name}">{user_name}</div>'
-                "</div></div>",
-                unsafe_allow_html=True,
-            )
-            with st.container(key="profile_edit_trigger"):
-                if st.button("✏️ Edit", key="profile_name_edit_btn"):
-                    st.session_state.editing_profile_name = True
-                    st.rerun()
+        st.markdown(
+            '<div class="sidebar-profile">'
+            f'<div class="sidebar-profile-avatar">{_initials(USER_NAME)}</div>'
+            '<div class="sidebar-profile-text">'
+            f'<div class="sidebar-profile-name" title="{USER_NAME}">{USER_NAME}</div>'
+            '<div class="sidebar-profile-sub">View Profile</div>'
+            "</div></div>",
+            unsafe_allow_html=True,
+        )
 
 page = st.session_state.page
 st.session_state.setdefault("fs_chart", None)
@@ -901,105 +702,13 @@ PAYMENT_ICONS = {"Cash": "💵", "UPI": "📱", "Card": "💳", "Other": "🔘"}
 # mismatch at the source instead of nudging text to paper over it. The two
 # action buttons now share their one column via a CSS flex row (see
 # ACTION_PAIR_CSS below) instead of being separate top-level columns.
-# --- Expense table layout ----------------------------------------------------
-# This used to be six st.columns weighted [1.3, 2.6, 1.6, 1.1, 1.2, 0.9].
-# st.columns is a PURE RATIO with no floor: a 1.1 weight is 12.6% of the row at
-# any width, including widths where 12.6% is 86px and the number_input inside
-# needs 110px. Streamlit does not stack columns on narrow screens, so the widget
-# kept its intrinsic minimum and pushed out of its column. Measured, the old
-# layout broke below ~1050px of content width - which is a 1280px window with
-# the sidebar open, i.e. the deployed case.
-#
-# The five data cells are now ONE CSS grid inside a single markdown block, so
-# minmax() can hold a real minimum per column, and a media query reflows the row
-# to two lines before those minimums are ever violated. Only the two action
-# buttons remain a Streamlit column, because they must be real widgets.
-ACTION_COL_PX = 88          # width reserved for the pencil + trash pair
-ACTION_COL_GAP = 12         # matches the grid gap so header and rows align
-
-# (min, flexible share) per column. The minimums are the widths the widgets in
-# EDIT mode actually need, measured in JetBrains Mono at 12-13px.
-_EXP_GRID_COLUMNS = [
-    ("Date", 86, 1.15),
-    ("Merchant", 120, 2.40),
-    ("Category", 120, 1.60),
-    ("Amount", 78, 1.00),
-    ("Payment Mode", 84, 1.10),
+_TABLE_COL_WEIGHTS = [1.3, 2.6, 1.6, 1.1, 1.2, 0.9]
+_TABLE_HEADERS = ["Date", "Merchant", "Category", "Amount", "Payment Mode", "Action"]
+_TABLE_HEADER_STYLES = [
+    "text-align:left;", "text-align:left;", "text-align:left;",
+    "text-align:left;", "text-align:left;",
+    "text-align:center;",
 ]
-_EXP_GRID_GAP = 12
-_EXP_GRID_TEMPLATE = " ".join(
-    f"minmax({mn}px, {fr}fr)" for _, mn, fr in _EXP_GRID_COLUMNS
-)
-# Where the grid must reflow. Derived from the column spec above, so changing a
-# minimum or a share moves the breakpoint automatically - no magic number.
-#
-# The naive threshold is "sum of the minimums + gaps" (536px here), and a width
-# sweep proved that WRONG: minmax() clamps each column INDEPENDENTLY, so a column
-# with a small fr share reaches its minimum while the others still have slack, and
-# the clamped total then exceeds the container. Overflow appeared at 577-609px
-# with the naive figure.
-#
-# The real threshold is the narrowest width at which NO column clamps, i.e. where
-# avail * fr_i / sum(fr) >= min_i holds for every column. Solving for avail and
-# taking the worst column gives the bound below.
-_EXP_TOTAL_FR = sum(fr for _, _, fr in _EXP_GRID_COLUMNS)
-_EXP_GAPS_TOTAL = _EXP_GRID_GAP * (len(_EXP_GRID_COLUMNS) - 1)
-_EXP_GRID_MIN = math.ceil(
-    max(mn * _EXP_TOTAL_FR / fr for _, mn, fr in _EXP_GRID_COLUMNS)
-) + _EXP_GAPS_TOTAL
-_EXP_REFLOW_AT = _EXP_GRID_MIN + 16      # headroom so it flips before it strains
-
-TABLE_CSS = (
-    "<style>"
-    # A CONTAINER query, not a media query. A media query measures the viewport,
-    # which cannot tell whether the sidebar is open - at 1024px with the sidebar
-    # collapsed there is plenty of room, and with it open there is not. The
-    # container query measures the row itself, so it is right either way.
-    ".exp-row-wrap { container-type: inline-size; width: 100%; }"
-    f".exp-grid {{ display: grid; grid-template-columns: {_EXP_GRID_TEMPLATE};"
-    f"  gap: {_EXP_GRID_GAP}px; align-items: center; width: 100%; }}"
-    ".exp-cell { min-width: 0; padding: 10px 0; font-size: var(--fs-body); }"
-    ".exp-cell > * { min-width: 0; }"
-    ".exp-merchant-name { font-size: 13px; font-weight: 600; overflow: hidden;"
-    "  text-overflow: ellipsis; white-space: nowrap; }"
-    ".exp-merchant-note { font-size: 10.5px; color: var(--muted); margin-top: 2px;"
-    "  font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }"
-    ".exp-amount { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent); }"
-    # Header uses the same grid and the same container, so it cannot drift from
-    # the cells beneath it and it hides at exactly the same point they reflow.
-    ".exp-head .exp-cell { font-size: 10px; color: var(--muted); text-transform: uppercase;"
-    "  letter-spacing: 0.05em; font-weight: 700; padding: 0 0 8px;"
-    "  border-bottom: 1px solid var(--border); }"
-    ".exp-cell-label { display: none; }"
-    # Pin the action column to a fixed width; the grid column absorbs the rest.
-    # Scoped to exprowview_ so edit mode's own layout is untouched.
-    '[class*="st-key-exprowview_"] [data-testid="stHorizontalBlock"] {'
-    f"  flex-wrap: nowrap !important; gap: {ACTION_COL_GAP}px !important;"
-    "  align-items: start !important;"
-    "}"
-    '[class*="st-key-exprowview_"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {'
-    "  flex: 1 1 auto !important; min-width: 0 !important; width: auto !important;"
-    "}"
-    '[class*="st-key-exprowview_"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {'
-    f"  flex: 0 0 {ACTION_COL_PX}px !important; min-width: {ACTION_COL_PX}px !important;"
-    f"  width: {ACTION_COL_PX}px !important;"
-    "}"
-    # --- Narrow: reflow to two lines instead of overflowing -------------------
-    f"@container (max-width: {_EXP_REFLOW_AT}px) {{"
-    "  .exp-head { display: none !important; }"
-    "  .exp-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); row-gap: 4px; }"
-    "  .exp-cell { padding: 4px 0; }"
-    "  .exp-cell-merchant { grid-column: 1 / -1; order: -1; }"
-    "  .exp-cell-label { display: block; font-size: 9px; letter-spacing: 0.06em;"
-    "    text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }"
-    "  .exp-merchant-name, .exp-merchant-note { white-space: normal; }"
-    "}"
-    # Edit mode: two generous widget rows rather than five cramped columns.
-    '[class*="st-key-exprowedit_"] { padding: 6px 0 10px; }'
-    ".exp-edit-date { font-size: 11px; color: var(--muted); padding: 2px 0 6px; }"
-    "</style>"
-)
-
 
 # Puts the two buttons of an st.container(key=f"actionpair_...") side by
 # side. A nested st.columns(2) inside an already-narrow column was tried
@@ -1008,13 +717,31 @@ TABLE_CSS = (
 # the container's own children avoids nested columns entirely, so it stays
 # side-by-side at any width.
 #
-# display:contents on every known wrapper testid removes their boxes from
-# layout at any depth, so the two real div.stButton elements become the direct
-# flex items of the keyed container regardless of how Streamlit nests things.
+# Two earlier attempts at the CSS both silently matched nothing: a child
+# combinator (">") assuming stVerticalBlock was a direct child, then a plain
+# descendant selector assuming it was a real ancestor either way. Rather than
+# guess a third time which wrapper divs Streamlit inserts and in what order,
+# this collapses ALL of the known wrapper testids (proven to exist in this
+# app - see the stColumn/stVerticalBlock/stVerticalBlockBorderWrapper/
+# stElementContainer chain the stat-card width fix already relies on)
+# via display:contents, at any depth. That removes their boxes from layout
+# entirely regardless of how they're nested, so the two real div.stButton
+# elements end up as the direct, only flex items of the outer container -
+# which is flexed by matching the key class itself, not a descendant of it,
+# so it doesn't matter whether that class sits on the outermost wrapper or
+# something deeper.
 ACTION_PAIR_CSS = (
     "<style>"
     '[class*="st-key-actionpair_"] {'
     "  display: flex !important; flex-direction: row !important; gap: 6px !important;"
+    # Every other cell in the row wraps its content in a div with
+    # "padding:10px 0" (see c1-c5 above), which is what gives the row its
+    # breathing room from the divider above and below. The action buttons
+    # never got that padding - min-height:unset and the exprow rule that
+    # zeroes stElementContainer's own margin/padding (below) strip it
+    # entirely - so they sit flush against the line above them. Matching
+    # padding here puts them on the same vertical footing as every other
+    # column instead of looking un-padded specifically in this one slot.
     "  padding: 10px 0 !important;"
     "}"
     '[class*="st-key-actionpair_"] [data-testid="stVerticalBlockBorderWrapper"],'
@@ -1027,75 +754,44 @@ ACTION_PAIR_CSS = (
 )
 
 
-def _exp_cell(label: str, inner: str, extra_class: str = "") -> str:
-    """One grid cell. data-label drives the inline field name shown when the row
-    reflows to two lines on a narrow screen."""
-    cls = f"exp-cell {extra_class}".strip()
-    return (
-        f'<div class="{cls}">'
-        f'<div class="exp-cell-label">{label}</div>'
-        f"{inner}</div>"
-    )
-
-
 def render_expense_table(df_slice, key_prefix):
     """Renders a header row plus one row per expense, with working edit (pencil)
     and delete (trash) actions. Shared by the Dashboard's Recent Expenses list
     and the History page's All Expenses table."""
-    st.markdown(TABLE_CSS, unsafe_allow_html=True)
     st.markdown(ACTION_PAIR_CSS, unsafe_allow_html=True)
-
-    # Header sits in the same two-part structure as a view row, so the grid
-    # columns line up with the cells beneath them by construction.
-    with st.container(key="exprowview_header"):
-        head_col, head_act = st.columns([8, 1])
-        with head_col:
-            st.markdown(
-                '<div class="exp-row-wrap"><div class="exp-grid exp-head">'
-                + "".join(
-                    f'<div class="exp-cell">{label}</div>'
-                    for label, _, _ in _EXP_GRID_COLUMNS
-                )
-                + "</div></div>",
-                unsafe_allow_html=True,
-            )
-        with head_act:
-            # No "Action" label: the pencil and trash icons need none, and a lone
-            # label left hanging after the other headers hide would read oddly.
-            st.markdown("", unsafe_allow_html=True)
+    header_cols = st.columns(_TABLE_COL_WEIGHTS)
+    for col, h, extra in zip(header_cols, _TABLE_HEADERS, _TABLE_HEADER_STYLES):
+        col.markdown(
+            '<div style="font-size:10px; color:var(--muted); text-transform:uppercase;'
+            ' letter-spacing:0.05em; font-weight:700; padding-bottom:8px;'
+            f' border-bottom:1px solid var(--border); {extra}">{h}</div>',
+            unsafe_allow_html=True,
+        )
 
     for idx, row in df_slice.iterrows():
         row_id = row.get("id", idx)
         edit_key = f"{key_prefix}_{row_id}"
         editing = st.session_state.get("editing_row") == edit_key
-        date_str = row["date"].strftime("%d %b %Y") if pd.notnull(row["date"]) else "—"
 
-        if editing:
-            # Edit mode gets its own layout: two roomy widget rows instead of
-            # five narrow columns. At 884px of content that is 434/434 on the
-            # first row and roughly 250/250/175 on the second - every widget
-            # comfortably above its minimum, and still fine down to ~630px.
-            with st.container(key=f"exprowedit_{edit_key}"):
-                st.markdown(
-                    f'<div class="exp-edit-date">📅&nbsp;{date_str}</div>',
-                    unsafe_allow_html=True,
-                )
-                ea1, ea2 = st.columns(2)
-                with ea1:
-                    new_merchant = st.text_input("Merchant", value=row["merchant"], key=f"{edit_key}_merchant")
-                with ea2:
+        with st.container(key=f"exprow_{edit_key}"):
+            c1, c2, c3, c4, c5, c6 = st.columns(_TABLE_COL_WEIGHTS)
+            date_str = row["date"].strftime("%d %b %Y") if pd.notnull(row["date"]) else "—"
+            c1.markdown(f'<div style="padding:10px 0; font-size:12px;">📅&nbsp;{date_str}</div>', unsafe_allow_html=True)
+
+            if editing:
+                with c2:
+                    new_merchant = st.text_input("Merchant", value=row["merchant"], key=f"{edit_key}_merchant", label_visibility="collapsed")
+                with c3:
                     cat_idx = CATEGORY_NAMES.index(row["category"]) if row["category"] in CATEGORY_NAMES else len(CATEGORY_NAMES) - 1
-                    new_cat = st.selectbox("Category", CATEGORY_NAMES, index=cat_idx, key=f"{edit_key}_cat")
-                eb1, eb2, eb3 = st.columns([1, 1, 0.7])
-                with eb1:
-                    new_amount = st.number_input("Amount", value=float(row["amount"] or 0), key=f"{edit_key}_amt", format="%.2f")
-                with eb2:
+                    new_cat = st.selectbox("Category", CATEGORY_NAMES, index=cat_idx, key=f"{edit_key}_cat", label_visibility="collapsed")
+                with c4:
+                    new_amount = st.number_input("Amount", value=float(row["amount"] or 0), key=f"{edit_key}_amt", label_visibility="collapsed", format="%.2f")
+                with c5:
                     pm_idx = PAYMENT_MODES.index(row["payment_mode"]) if row.get("payment_mode") in PAYMENT_MODES else 0
-                    new_pm = st.selectbox("Payment Mode", PAYMENT_MODES, index=pm_idx, key=f"{edit_key}_pm")
-                with eb3:
-                    st.markdown('<div class="parsed-item-spacer">.</div>', unsafe_allow_html=True)
+                    new_pm = st.selectbox("Payment", PAYMENT_MODES, index=pm_idx, key=f"{edit_key}_pm", label_visibility="collapsed")
+                with c6:
                     with st.container(key=f"actionpair_{edit_key}_edit"):
-                        if st.button("✓", key=f"{edit_key}_save", help="Save changes"):
+                        if st.button("✓", key=f"{edit_key}_save"):
                             try:
                                 storage.update_expense(row["id"], {
                                     "merchant": new_merchant, "category": new_cat,
@@ -1105,50 +801,31 @@ def render_expense_table(df_slice, key_prefix):
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Couldn\'t save: {e}")
-                        if st.button("✕", key=f"{edit_key}_cancel", help="Discard changes"):
+                        if st.button("✕", key=f"{edit_key}_cancel"):
                             st.session_state.editing_row = None
                             st.rerun()
-        else:
-            note = row.get("notes") or ""
-            color = CATEGORY_COLORS.get(row["category"], "#9CA3AF")
-            icon = CATEGORY_ICONS.get(row["category"], "•")
-            pm_mode = row.get("payment_mode", "Cash")
-            pm_icon = PAYMENT_ICONS.get(pm_mode, "💵")
-            note_html = f'<div class="exp-merchant-note">{note}</div>' if note else ""
-
-            with st.container(key=f"exprowview_{edit_key}"):
-                grid_col, act_col = st.columns([8, 1])
-                with grid_col:
-                    st.markdown(
-                        '<div class="exp-row-wrap"><div class="exp-grid">'
-                        + _exp_cell("Date", f"📅&nbsp;{date_str}")
-                        + _exp_cell(
-                            "Merchant",
-                            f'<div class="exp-merchant-name">{row["merchant"]}</div>{note_html}',
-                            "exp-cell-merchant",
-                        )
-                        + _exp_cell(
-                            "Category",
-                            f'<span class="stamp-tag" style="color:{color};">{icon}&nbsp;{row["category"]}</span>',
-                        )
-                        + _exp_cell("Amount", f'<div class="exp-amount">₹{row["amount"]:,.2f}</div>')
-                        + _exp_cell("Payment Mode", f"{pm_icon}&nbsp;{pm_mode}")
-                        + "</div></div>",
-                        unsafe_allow_html=True,
-                    )
-                with act_col:
+            else:
+                note = row.get("notes") or ""
+                color = CATEGORY_COLORS.get(row["category"], "#9CA3AF")
+                icon = CATEGORY_ICONS.get(row["category"], "•")
+                pm_icon = PAYMENT_ICONS.get(row.get("payment_mode", "Cash"), "💵")
+                note_html = f'<div style="font-size:10.5px; color:var(--muted); margin-top:2px; font-style:italic;">{note}</div>' if note else ""
+                c2.markdown(f'<div style="padding:10px 0;"><div style="font-size:13px; font-weight:600;">{row["merchant"]}</div>{note_html}</div>', unsafe_allow_html=True)
+                c3.markdown(f'<div style="padding:10px 0;"><span class="stamp-tag" style="color:{color};">{icon}&nbsp;{row["category"]}</span></div>', unsafe_allow_html=True)
+                c4.markdown(f'<div style="padding:10px 0; font-family:monospace; font-weight:700; color:var(--accent);">₹{row["amount"]:,.2f}</div>', unsafe_allow_html=True)
+                c5.markdown(f'<div style="padding:10px 0; font-size:12px;">{pm_icon}&nbsp;{row.get("payment_mode", "Cash")}</div>', unsafe_allow_html=True)
+                with c6:
                     with st.container(key=f"actionpair_{edit_key}_view"):
-                        if st.button("✏️", key=f"{edit_key}_editbtn", help="Edit this expense"):
+                        if st.button("✏️", key=f"{edit_key}_editbtn"):
                             st.session_state.editing_row = edit_key
                             st.rerun()
-                        if st.button("🗑️", key=f"{edit_key}_delbtn", help="Delete this expense"):
+                        if st.button("🗑️", key=f"{edit_key}_delbtn"):
                             try:
                                 storage.delete_expense(row["id"])
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Couldn\'t delete: {e}")
-
-        st.markdown('<div style="border-top:1px solid var(--border); margin:2px 0 4px;"></div>', unsafe_allow_html=True)
+            st.markdown('<div style="border-top:1px solid var(--border); margin:2px 0 4px;"></div>', unsafe_allow_html=True)
 
 
 EXAMPLE_EN = "500 at McDonald's and 200 for shopping"
@@ -1160,8 +837,7 @@ EXAMPLE_HI = "मैकडॉनल्ड्स में पांच सौ �
 if page == "Dashboard":
     hour = datetime.datetime.now().hour
     greeting = "Good morning" if hour < 12 else ("Good afternoon" if hour < 17 else "Good evening")
-    user_name = get_user_name() or "there"
-    st.markdown(f'<div class="page-title">{greeting}, {user_name} 👋</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="page-title">{greeting}, {USER_NAME} 👋</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">Here\'s your financial overview</div>', unsafe_allow_html=True)
 
     # Some controls live at the bottom of the page but act on the top of it.
@@ -1182,13 +858,14 @@ if page == "Dashboard":
     else:
         highest_amt, highest_merchant, highest_date = 0.0, "—", ""
 
-    stat_grid([
-        stat_card("Total Spent", f"₹{total_spent:,.0f}", "This Month", "💳"),
-        stat_card("Transactions", f"{txn_count}", "This Month", "🔁"),
-        stat_card("Daily Average", f"₹{daily_avg:,.0f}", "This Month", "📈"),
-        stat_card("Highest Expense", f"₹{highest_amt:,.0f}",
-                  f"{highest_merchant} • {highest_date}", "🔺"),
-    ])
+    c1, c2, c3, c4 = st.columns(4)
+    for col, icon, label, value, sub in [
+        (c1, "💳", "Total Spent", f"₹{total_spent:,.0f}", "This Month"),
+        (c2, "🔁", "Transactions", f"{txn_count}", "This Month"),
+        (c3, "📈", "Daily Average", f"₹{daily_avg:,.0f}", "This Month"),
+        (c4, "🔺", "Highest Expense", f"₹{highest_amt:,.0f}", f"{highest_merchant} • {highest_date}"),
+    ]:
+        col.markdown(f'<div class="stat-card"><div class="stat-card-icon">{icon}</div><div class="stat-card-label">{label}</div><div class="stat-card-value">{value}</div><div class="stat-card-sub">{sub}</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1327,7 +1004,7 @@ if page == "Dashboard":
                     showarrow=False, xref="paper", yref="paper",
                 )],
             )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
         def _render_trend_chart(height: int) -> None:
             if month_df.empty:
@@ -1363,7 +1040,7 @@ if page == "Dashboard":
                     tickprefix="₹", separatethousands=True, rangemode="tozero",
                 ),
             )
-            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
 
         CHART_SPECS = [
             ("category", "Spending by Category", _render_category_chart),
@@ -1479,20 +1156,15 @@ if page == "Dashboard":
 # PAGE: ADD EXPENSE
 # =============================================================================
 elif page == "Add Expense":
-    # [4, 1] left the button ~174px at a 1280px window; "How it works?" needs
-    # about 150px of text plus padding, so it wrapped to two lines and pushed the
-    # box taller than the heading beside it. Wider column, and the label wraps
-    # cleanly instead of stretching its box.
-    title_col, help_col = st.columns([3, 1.4])
+    title_col, help_col = st.columns([4, 1])
     with title_col:
         st.markdown('<div class="page-title">Add Expense</div>', unsafe_allow_html=True)
         st.markdown('<div class="page-subtitle">Type, speak or upload — we\'ll take care of the rest</div>', unsafe_allow_html=True)
     with help_col:
         if "show_how_it_works" not in st.session_state:
             st.session_state.show_how_it_works = False
-        with st.container(key="how_it_works_wrap"):
-            if st.button("❓ How it works?", key="how_it_works_btn"):
-                st.session_state.show_how_it_works = not st.session_state.show_how_it_works
+        if st.button("❓ How it works?", key="how_it_works_btn"):
+            st.session_state.show_how_it_works = not st.session_state.show_how_it_works
 
     if st.session_state.get("show_how_it_works"):
         st.info(
@@ -1573,36 +1245,26 @@ elif page == "Add Expense":
             with btn_col:
                 st.markdown('<div style="height:2px;"></div>', unsafe_allow_html=True)
                 st.button("↵ Enter", key="enter_btn", type="primary", use_container_width=True)
-            # The counter was rendered full-width after the columns, so it sat far
-            # right under the Enter button rather than under the textarea it counts.
-            # It now lives inside the input column.
-            with input_col:
-                st.markdown(
-                    '<div style="text-align:right; font-size:10px; color:var(--muted);'
-                    f' margin-top:2px;">{len(text_input)}/300</div>',
-                    unsafe_allow_html=True,
-                )
+            # margin-top:-30px used to drag this up over the textarea, where it
+            # could collide with the last line of typed text. It now sits below.
+            st.markdown(
+                '<div style="text-align:right; font-size:10px; color:var(--muted);'
+                f' margin-top:2px; margin-right:8px;">{len(text_input)}/300</div>',
+                unsafe_allow_html=True,
+            )
             if text_input.strip():
                 parsed_text = text_input
 
             st.markdown('<div style="font-size:11px; color:var(--muted); margin-top:14px; margin-bottom:6px;">Examples:</div>', unsafe_allow_html=True)
-            # Was st.columns([3, 0.3, 3, 0.3, 2, 0.3, 3.4]) - four buttons that are
-            # visually one set, given four DIFFERENT widths, with three 0.3 spacer
-            # columns holding a middot between them. The longest label ("Netflix
-            # subscription 649") landed in the narrowest column (weight 2) and wrapped
-            # out of its box, while "Uber ride 150" sat in the widest (3.4).
-            #
-            # Equal columns, no spacers. These have to stay st.columns because they
-            # are real buttons, so equal weights are the best available: every label
-            # gets the same room and the widest one decides when they all wrap.
             with st.container(key="example_chip_row"):
-                for col, ex in zip(st.columns(len(QUICK_EXAMPLES_EN)), QUICK_EXAMPLES_EN):
-                    with col:
-                        if st.button(ex, key=f"ex_en_{ex}", use_container_width=True):
-                            st.session_state[
-                                f"expense_text_{st.session_state.input_key_counter}"
-                            ] = ex
-                            st.rerun()
+                ex_cols = st.columns([3, 0.3, 3, 0.3, 2, 0.3, 3.4])
+                for slot, i in enumerate([0, 2, 4, 6]):
+                    with ex_cols[i]:
+                        if st.button(QUICK_EXAMPLES_EN[slot], key=f"ex_en_{slot}"):
+                            st.session_state[f"expense_text_{st.session_state.input_key_counter}"] = QUICK_EXAMPLES_EN[slot]; st.rerun()
+                for sep in [1, 3, 5]:
+                    with ex_cols[sep]:
+                        st.markdown('<div style="text-align:center; color:var(--muted); padding-top:8px;">&middot;</div>', unsafe_allow_html=True)
 
     else:  # Speak mode
         with card("speak"):
@@ -1612,18 +1274,12 @@ elif page == "Add Expense":
                 audio = mic_recorder(start_prompt="🎤 Start Recording", stop_prompt="⏹ Stop Recording", format="wav", just_once=True, key="mic_input", use_container_width=True)
 
             st.markdown('<div style="font-size:11px; color:var(--muted); margin-top:14px; margin-bottom:6px;">Try saying something like:</div>', unsafe_allow_html=True)
-            # One auto-fitting grid for both language rows, for the same reason as
-            # the stat cards: st.columns(4) pins four across and wraps the leftover
-            # onto a full-width row of its own once they stop fitting.
-            st.markdown(
-                '<div class="chip-grid">'
-                + "".join(
-                    f'<div class="example-chip">{ex}</div>'
-                    for ex in list(QUICK_EXAMPLES_EN) + list(QUICK_EXAMPLES_HI)
-                )
-                + "</div>",
-                unsafe_allow_html=True,
-            )
+            for row_examples, top_gap in ((QUICK_EXAMPLES_EN, "0"), (QUICK_EXAMPLES_HI, "6px")):
+                for col, ex in zip(st.columns(4), row_examples):
+                    col.markdown(
+                        f'<div class="example-chip" style="margin-top:{top_gap};">{ex}</div>',
+                        unsafe_allow_html=True,
+                    )
 
             st.markdown(
                 '<div class="insight-row" style="font-size:11px; color:var(--muted); margin-top:14px;">'
@@ -1756,20 +1412,15 @@ elif page == "Add Expense":
 # PAGE: HISTORY
 # =============================================================================
 elif page == "History":
-    # [4, 1] left the button ~174px at a 1280px window; "How it works?" needs
-    # about 150px of text plus padding, so it wrapped to two lines and pushed the
-    # box taller than the heading beside it. Wider column, and the label wraps
-    # cleanly instead of stretching its box.
-    title_col, help_col = st.columns([3, 1.4])
+    title_col, help_col = st.columns([4, 1])
     with title_col:
         st.markdown('<div class="page-title">History</div>', unsafe_allow_html=True)
         st.markdown('<div class="page-subtitle">View, search and manage your past expenses</div>', unsafe_allow_html=True)
     with help_col:
         if "hist_how_it_works" not in st.session_state:
             st.session_state.hist_how_it_works = False
-        with st.container(key="how_it_works_wrap_hist"):
-            if st.button("❓ How it works?", key="hist_how_it_works_btn"):
-                st.session_state.hist_how_it_works = not st.session_state.hist_how_it_works
+        if st.button("❓ How it works?", key="hist_how_it_works_btn"):
+            st.session_state.hist_how_it_works = not st.session_state.hist_how_it_works
     if st.session_state.get("hist_how_it_works"):
         st.info(
             "Filter by date, category or payment mode, or search by merchant/note. "
@@ -1853,21 +1504,18 @@ elif page == "History":
     top_cat_icon = CATEGORY_ICONS.get(top_cat_name, "•")
     top_cat_color = CATEGORY_COLORS.get(top_cat_name, "#9CA3AF")
 
-    stat_grid([
-        stat_card("Total Expenses", f"₹{total_exp:,.2f}", f"{len(filtered)} Transactions"),
-        stat_card("This Month", f"₹{this_month_exp:,.2f}", f"{this_month_count} Transactions"),
-        stat_card("Average", f"₹{avg_exp:,.2f}", "Per Transaction"),
-        stat_card(
-            "Top Category", "", f"₹{top_cat_amt:,.2f} ({top_cat_pct:.0f}%)",
-            value_html=(
-                '<div style="display:flex; align-items:center; gap:6px; margin-top:4px; min-width:0;">'
-                f'<span style="width:22px; height:22px; border-radius:50%; flex-shrink:0;'
-                f' background:{top_cat_color}22; color:{top_cat_color}; display:flex;'
-                f' align-items:center; justify-content:center; font-size:11px;">{top_cat_icon}</span>'
-                f'<span class="stat-card-value" style="margin-top:0;">{top_cat_name}</span></div>'
-            ),
-        ),
-    ])
+    s1, s2, s3, s4 = st.columns(4)
+    s1.markdown(f'<div class="stat-card"><div class="stat-card-label">Total Expenses</div><div class="stat-card-value">₹{total_exp:,.2f}</div><div class="stat-card-sub">{len(filtered)} Transactions</div></div>', unsafe_allow_html=True)
+    s2.markdown(f'<div class="stat-card"><div class="stat-card-label">This Month</div><div class="stat-card-value">₹{this_month_exp:,.2f}</div><div class="stat-card-sub">{this_month_count} Transactions</div></div>', unsafe_allow_html=True)
+    s3.markdown(f'<div class="stat-card"><div class="stat-card-label">Average</div><div class="stat-card-value">₹{avg_exp:,.2f}</div><div class="stat-card-sub">Per Transaction</div></div>', unsafe_allow_html=True)
+    s4.markdown(
+        f'<div class="stat-card"><div class="stat-card-label">Top Category</div>'
+        f'<div style="display:flex; align-items:center; gap:6px; margin-top:4px;">'
+        f'<span style="width:22px; height:22px; border-radius:50%; background:{top_cat_color}22; color:{top_cat_color}; display:flex; align-items:center; justify-content:center; font-size:11px;">{top_cat_icon}</span>'
+        f'<span class="stat-card-value" style="margin-top:0;">{top_cat_name}</span></div>'
+        f'<div class="stat-card-sub">₹{top_cat_amt:,.2f} ({top_cat_pct:.0f}%)</div></div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1887,29 +1535,7 @@ elif page == "History":
             render_expense_table(page_slice, "hist")
 
             if total_pages > 1:
-                # WINDOWED pagination. This was [0.6] + [0.5]*total_pages + [0.6, 4]:
-                # one column per page, unbounded. At 60 pages that is 63 columns of
-                # ~20px each, and Streamlit's inter-column gap does not shrink, so
-                # past roughly 20 pages the gaps alone exceeded the row width and it
-                # overflowed sideways.
-                #
-                # The window is a FIXED number of columns whatever the page count -
-                # first, last, and a few either side of the current page, with
-                # ellipses standing in for the rest.
-                _cur = st.session_state.hist_page_num
-                _around = 1
-                _shown = {1, total_pages}
-                _shown |= {q for q in range(_cur - _around, _cur + _around + 1)
-                           if 1 <= q <= total_pages}
-                page_slots = []
-                _prev = 0
-                for q in sorted(_shown):
-                    if q - _prev > 1:
-                        page_slots.append(None)      # ellipsis
-                    page_slots.append(q)
-                    _prev = q
-                # 2 arrows + the slots + the "showing x to y" caption.
-                nav_cols = st.columns([0.6] + [0.5] * len(page_slots) + [0.6, 4])
+                nav_cols = st.columns([0.6] + [0.5] * total_pages + [0.6, 4])
                 with nav_cols[0]:
                     if st.button("←", key="hist_prev", disabled=(st.session_state.hist_page_num <= 1), use_container_width=True):
                         st.session_state.hist_page_num -= 1; st.rerun()
@@ -1939,24 +1565,17 @@ elif page == "History":
                     "</style>",
                     unsafe_allow_html=True,
                 )
-                for slot_i, p in enumerate(page_slots, start=1):
-                    with nav_cols[slot_i]:
-                        if p is None:
-                            st.markdown(
-                                '<div style="text-align:center; color:var(--muted);'
-                                ' padding-top:10px;">…</div>',
-                                unsafe_allow_html=True,
-                            )
-                            continue
+                for p in range(1, total_pages + 1):
+                    with nav_cols[p]:
                         with st.container(key=f"pgrow_{p}"):
                             if st.button(str(p), key=f"hist_page_{p}", use_container_width=True) \
                                     and p != st.session_state.hist_page_num:
                                 st.session_state.hist_page_num = p
                                 st.rerun()
-                with nav_cols[len(page_slots) + 1]:
+                with nav_cols[total_pages + 1]:
                     if st.button("→", key="hist_next", disabled=(st.session_state.hist_page_num >= total_pages), use_container_width=True):
                         st.session_state.hist_page_num += 1; st.rerun()
-                with nav_cols[len(page_slots) + 2]:
+                with nav_cols[total_pages + 2]:
                     st.markdown(f'<div style="text-align:right; font-size:11px; color:var(--muted); padding-top:10px;">Showing {start + 1} to {min(start + PAGE_SIZE, len(filtered))} of {len(filtered)}</div>', unsafe_allow_html=True)
 
     if not filtered.empty:
@@ -2019,12 +1638,11 @@ elif page == "Analytics":
         avg_a = total_a / len(a_filtered) if len(a_filtered) else 0
         highest_row = a_filtered.loc[a_filtered["amount"].idxmax()]
 
-        stat_grid([
-            stat_card("Total Expenses", f"₹{total_a:,.0f}", f"{len(a_filtered)} Transactions"),
-            stat_card("This Month", f"₹{this_month_a:,.0f}", f"{this_month_a_count} Transactions"),
-            stat_card("Average Per Day", f"₹{avg_a:,.0f}", f"{len(a_filtered)} Transactions"),
-            stat_card("Highest Expense", f"₹{highest_row['amount']:,.0f}", str(highest_row["merchant"])),
-        ])
+        s1, s2, s3, s4 = st.columns(4)
+        s1.markdown(f'<div class="stat-card"><div class="stat-card-label">Total Expenses</div><div class="stat-card-value">₹{total_a:,.0f}</div><div class="stat-card-sub">{len(a_filtered)} Transactions</div></div>', unsafe_allow_html=True)
+        s2.markdown(f'<div class="stat-card"><div class="stat-card-label">This Month</div><div class="stat-card-value">₹{this_month_a:,.0f}</div><div class="stat-card-sub">{this_month_a_count} Transactions</div></div>', unsafe_allow_html=True)
+        s3.markdown(f'<div class="stat-card"><div class="stat-card-label">Average Per Day</div><div class="stat-card-value">₹{avg_a:,.0f}</div><div class="stat-card-sub">{len(a_filtered)} Transactions</div></div>', unsafe_allow_html=True)
+        s4.markdown(f'<div class="stat-card"><div class="stat-card-label">Highest Expense</div><div class="stat-card-value">₹{highest_row["amount"]:,.0f}</div><div class="stat-card-sub">{highest_row["merchant"]}</div></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
         cat_totals_a = storage.category_totals(a_filtered)
@@ -2034,7 +1652,7 @@ elif page == "Analytics":
             fig = go.Figure(data=[go.Pie(labels=cat_totals_a.index, values=cat_totals_a.values, hole=0.62, marker=dict(colors=colors, line=dict(color="#12161F", width=2)), textinfo="none", hovertemplate="%{label}: ₹%{value:,.0f}<extra></extra>")])
             fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color="#E6E9EF"), showlegend=True, legend=dict(font=dict(size=10)), margin=dict(l=0,r=0,t=10,b=10), height=height,
                 annotations=[dict(text=f"₹{cat_totals_a.sum():,.0f}<br><span style='font-size:9px;color:#7C8494;'>Total</span>", x=0.5, y=0.5, font=dict(size=15, color="#E6E9EF"), showarrow=False)])
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
         def _render_an_time(height: int) -> None:
             daily_a = a_filtered.groupby(a_filtered["date"].dt.date)["amount"].sum().sort_index()
@@ -2064,7 +1682,7 @@ elif page == "Analytics":
                     tickprefix="₹", separatethousands=True, rangemode="tozero",
                 ),
             )
-            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
 
         AN_TOP_CHARTS = [
             ("an_category", "Expenses by Category", _render_an_category),
@@ -2091,7 +1709,7 @@ elif page == "Analytics":
             fig3 = go.Figure(data=[go.Pie(labels=pm_totals.index, values=pm_totals.values, hole=0.62, marker=dict(colors=colors2, line=dict(color="#12161F", width=2)), textinfo="none", hovertemplate="%{label}: ₹%{value:,.0f}<extra></extra>")])
             fig3.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color="#E6E9EF"), showlegend=True, legend=dict(font=dict(size=10)), margin=dict(l=0,r=0,t=10,b=10), height=height,
                 annotations=[dict(text=f"₹{pm_totals.sum():,.0f}<br><span style='font-size:9px;color:#7C8494;'>Total</span>", x=0.5, y=0.5, font=dict(size=14, color="#E6E9EF"), showarrow=False)])
-            st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+            st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
 
         def _render_an_merchants() -> None:
             st.markdown('<div class="section-card-title">Top Merchants</div>', unsafe_allow_html=True)
@@ -2187,13 +1805,11 @@ elif page == "Categories":
     avg_per_cat = (total_all / len(cat_totals_all)) if len(cat_totals_all) else 0
     uncategorized = df[df["category"].isin(["", None])] if not df.empty else pd.DataFrame()
 
-    stat_grid([
-        stat_card("Total Spent", f"₹{total_all:,.0f}", f"{len(df)} Transactions"),
-        stat_card("Top Category", "", f"{top_cat_amt_pct:.0f}%",
-                  value_html=f'<div class="stat-card-value" style="font-size:15px;">{top_cat}</div>'),
-        stat_card("Avg. Per Category", f"₹{avg_per_cat:,.0f}", f"{len(cat_totals_all)} Categories"),
-        stat_card("Uncategorized", "₹0.00", f"{len(uncategorized)} Transactions"),
-    ])
+    s1, s2, s3, s4 = st.columns(4)
+    s1.markdown(f'<div class="stat-card"><div class="stat-card-label">Total Spent</div><div class="stat-card-value">₹{total_all:,.0f}</div><div class="stat-card-sub">{len(df)} Transactions</div></div>', unsafe_allow_html=True)
+    s2.markdown(f'<div class="stat-card"><div class="stat-card-label">Top Category</div><div class="stat-card-value" style="font-size:15px;">{top_cat}</div><div class="stat-card-sub">{top_cat_amt_pct:.0f}%</div></div>', unsafe_allow_html=True)
+    s3.markdown(f'<div class="stat-card"><div class="stat-card-label">Avg. Per Category</div><div class="stat-card-value">₹{avg_per_cat:,.0f}</div><div class="stat-card-sub">{len(cat_totals_all)} Categories</div></div>', unsafe_allow_html=True)
+    s4.markdown(f'<div class="stat-card"><div class="stat-card-label">Uncategorized</div><div class="stat-card-value">₹0.00</div><div class="stat-card-sub">{len(uncategorized)} Transactions</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -2228,7 +1844,7 @@ elif page == "Categories":
                 fig = go.Figure(data=[go.Pie(labels=cat_totals_all.index, values=cat_totals_all.values, hole=0.62, marker=dict(colors=colors, line=dict(color="#12161F", width=2)), textinfo="none", hovertemplate="%{label}: ₹%{value:,.0f}<extra></extra>")])
                 fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(color="#E6E9EF"), showlegend=True, legend=dict(font=dict(size=10)), margin=dict(l=0,r=0,t=10,b=10), height=560 if is_fs else 280,
                     annotations=[dict(text=f"₹{total_all:,.0f}<br><span style='font-size:9px;color:#7C8494;'>Total</span>", x=0.5, y=0.5, font=dict(size=16, color="#E6E9EF"), showarrow=False)])
-                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     with tab2:
         with card("cat_insights"):
             if cat_totals_all.empty:
