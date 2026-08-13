@@ -215,6 +215,21 @@ CUSTOM_CSS = """
     .tip-box b { color: var(--accent); letter-spacing: 0.08em; }
 
     .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; width: 100%; box-sizing: border-box; min-height: 84px; }
+    /* Stat cards are laid out with CSS GRID, not st.columns. st.columns
+       auto-stacks to a single column below an internal Streamlit width
+       threshold - which is why the 4 cards showed side-by-side on a wide
+       local window but stacked vertically on the (narrower) deployed window,
+       despite identical code/versions. auto-fit + minmax keeps them
+       side-by-side and only wraps when there is genuinely no room, at any
+       width, on any deploy. (The Quick Add / Monthly Budget row below still
+       uses st.columns because those cards contain real interactive widgets
+       that can't live inside an HTML grid; stacking those two on a narrow
+       window is fine.) */
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px; width: 100%;
+    }
     /* Force every wrapper layer between the column and our card to actually stretch —
        Streamlit's own containers otherwise shrink-wrap to content, so a card with more
        text (e.g. Top Category) renders wider than one with less (e.g. This Month). */
@@ -858,14 +873,20 @@ if page == "Dashboard":
     else:
         highest_amt, highest_merchant, highest_date = 0.0, "—", ""
 
-    c1, c2, c3, c4 = st.columns(4)
-    for col, icon, label, value, sub in [
-        (c1, "💳", "Total Spent", f"₹{total_spent:,.0f}", "This Month"),
-        (c2, "🔁", "Transactions", f"{txn_count}", "This Month"),
-        (c3, "📈", "Daily Average", f"₹{daily_avg:,.0f}", "This Month"),
-        (c4, "🔺", "Highest Expense", f"₹{highest_amt:,.0f}", f"{highest_merchant} • {highest_date}"),
-    ]:
-        col.markdown(f'<div class="stat-card"><div class="stat-card-icon">{icon}</div><div class="stat-card-label">{label}</div><div class="stat-card-value">{value}</div><div class="stat-card-sub">{sub}</div></div>', unsafe_allow_html=True)
+    _stat_cards = [
+        ("💳", "Total Spent", f"₹{total_spent:,.0f}", "This Month"),
+        ("🔁", "Transactions", f"{txn_count}", "This Month"),
+        ("📈", "Daily Average", f"₹{daily_avg:,.0f}", "This Month"),
+        ("🔺", "Highest Expense", f"₹{highest_amt:,.0f}", f"{highest_merchant} • {highest_date}"),
+    ]
+    _stat_html = "".join(
+        f'<div class="stat-card"><div class="stat-card-icon">{icon}</div>'
+        f'<div class="stat-card-label">{label}</div>'
+        f'<div class="stat-card-value">{value}</div>'
+        f'<div class="stat-card-sub">{sub}</div></div>'
+        for icon, label, value, sub in _stat_cards
+    )
+    st.markdown(f'<div class="stat-grid">{_stat_html}</div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
