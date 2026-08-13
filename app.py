@@ -719,11 +719,16 @@ with st.sidebar:
     # sitting in the flow rather than breaking the layout.
     st.markdown(
         "<style>"
-        'section[data-testid="stSidebar"] { position: relative !important; }'
+        # Profile card sits in normal flow AFTER all nav items, pushed down a
+        # bit with margin-top. NOT position:absolute (which pulled it out of
+        # flow and floated it mid-nav, overlapping Categories) and NOT flexbox
+        # height:100% (which kept collapsing the nav). Normal flow is the one
+        # approach that can't overlap or hide anything - it just renders last,
+        # below the nav, every time. The Edit button lives inside this same
+        # container so the whole profile unit stays together.
         ".st-key-sidebar_profile {"
-        "  position: absolute !important; bottom: 16px !important;"
-        "  left: 12px !important; right: 12px !important;"
-        "  width: auto !important; box-sizing: border-box !important;"
+        "  margin-top: 24px !important;"
+        "  box-sizing: border-box !important;"
         "}"
         ".sidebar-profile {"
         "  display: flex; align-items: center; gap: 10px;"
@@ -747,12 +752,6 @@ with st.sidebar:
         ".sidebar-profile-sub {"
         "  font-size: 10px; color: var(--muted);"
         "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
-        "}"
-        # Very short viewports: unpin so the card can't sit on top of the nav.
-        "@media (max-height: 520px) {"
-        "  .st-key-sidebar_profile {"
-        "    position: static !important; margin-top: 20px !important;"
-        "  }"
         "}"
         # "Edit" is a small text link inside the profile card, standing in for
         # the old static "View Profile" caption line.
