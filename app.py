@@ -377,6 +377,40 @@ CUSTOM_CSS = """
         margin-bottom: 16px !important;
         box-sizing: border-box !important;
     }
+    /* Card content overflow fix. Streamlit pins a fixed pixel width on the
+       inner wrappers (an HTML width="370" attribute on stElementContainer /
+       stVerticalBlock and an inline style="width:370px" on stMarkdown and the
+       widgets). That 370px is the COLUMN width, but the padded card content
+       box is ~40px narrower - so the progress bar, dividers, inputs and
+       buttons render 370px wide and spill PAST the card's right border,
+       breaking the border visually. This showed up only on the deployed
+       render (the deployed window fell into the width where Streamlit pins
+       370px). Overriding those wrappers back to width:100% of the padded box
+       keeps everything inside the border. Only vertical-stack wrappers are
+       targeted (NOT stHorizontalBlock or stColumn) so multi-column rows keep
+       their layout. */
+    [class*="st-key-card_"] [data-testid="stElementContainer"],
+    [class*="st-key-card_"] [data-testid="stVerticalBlock"],
+    [class*="st-key-card_"] [data-testid="stMarkdown"],
+    [class*="st-key-card_"] [data-testid="stMarkdownContainer"],
+    [class*="st-key-card_"] div.stButton,
+    [class*="st-key-card_"] [data-testid="stTextInput"],
+    [class*="st-key-card_"] [data-testid="stTextArea"],
+    [class*="st-key-card_"] [data-testid="stNumberInput"],
+    [class*="st-key-card_"] [data-testid="stProgress"],
+    .st-key-type_input_box [data-testid="stElementContainer"],
+    .st-key-type_input_box [data-testid="stVerticalBlock"],
+    .st-key-type_input_box [data-testid="stMarkdown"],
+    .st-key-type_input_box [data-testid="stMarkdownContainer"],
+    .st-key-type_input_box div.stButton,
+    .st-key-type_input_box [data-testid="stTextInput"],
+    .st-key-type_input_box [data-testid="stTextArea"],
+    .st-key-parsed_items_panel [data-testid="stElementContainer"],
+    .st-key-parsed_items_panel [data-testid="stVerticalBlock"],
+    .st-key-parsed_items_panel [data-testid="stMarkdown"],
+    .st-key-parsed_items_panel [data-testid="stMarkdownContainer"] {
+        width: 100% !important; max-width: 100% !important; box-sizing: border-box !important;
+    }
     /* Cards that sit side by side share a min-height, so the shorter one does
        not leave a ragged bottom edge on the row. This replaces the old trick of
        padding the Top Merchants list with blank rows, which produced those
