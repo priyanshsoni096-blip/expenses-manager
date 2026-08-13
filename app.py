@@ -25,18 +25,51 @@ st.set_page_config(page_title="Smart Expense Tracker", page_icon="💰", layout=
 
 PAYMENT_MODES = ["Cash", "UPI", "Card", "Other"]
 
-USER_NAME = "Priyansh"
-
 
 def _initials(name: str) -> str:
     """Up to two initials for the sidebar avatar, derived rather than hardcoded
-    so changing USER_NAME can't leave a stale monogram behind."""
+    so changing the name can't leave a stale monogram behind."""
     parts = [w for w in name.split() if w]
     if not parts:
         return "?"
     if len(parts) == 1:
         return parts[0][:2].upper()
     return (parts[0][0] + parts[-1][0]).upper()
+
+
+@st.dialog("👋 Welcome")
+def name_dialog():
+    """Popup that asks for / edits the display name. Opens automatically on
+    first launch (no name saved yet) and whenever the sidebar "Edit" link is
+    clicked. Saves to Firestore via storage.set_user_name so it persists."""
+    current = st.session_state.get("user_name", "") or ""
+    if current:
+        st.write("Update the name shown on your dashboard.")
+    else:
+        st.write("What should we call you? This shows up on your dashboard.")
+    new_name = st.text_input(
+        "Your name", value=current, key="name_dialog_input",
+        placeholder="e.g. Priyansh", label_visibility="collapsed",
+    )
+    save, cancel = st.columns(2)
+    with save:
+        if st.button("Save", key="name_dialog_save", type="primary", use_container_width=True):
+            if new_name.strip():
+                try:
+                    storage.set_user_name(new_name.strip())
+                    st.session_state.user_name = new_name.strip()
+                    st.session_state.show_name_dialog = False
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Couldn't save: {e}")
+            else:
+                st.warning("Please enter a name.")
+    with cancel:
+        # Cancel is only meaningful once a name already exists; on first run
+        # the user should set one, so it just closes without saving either way.
+        if st.button("Cancel", key="name_dialog_cancel", use_container_width=True):
+            st.session_state.show_name_dialog = False
+            st.rerun()
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -721,19 +754,54 @@ with st.sidebar:
         "    position: static !important; margin-top: 20px !important;"
         "  }"
         "}"
+        # "Edit" is a small text link inside the profile card, standing in for
+        # the old static "View Profile" caption line.
+        ".st-key-profile_edit_trigger { margin-top: 6px !important; }"
+        ".st-key-profile_edit_trigger button {"
+        "  background: transparent !important; border: none !important;"
+        "  color: var(--muted) !important; font-size: 10px !important;"
+        "  padding: 0 !important; min-height: unset !important; text-align: left !important;"
+        "  text-decoration: underline; text-decoration-color: transparent;"
+        "}"
+        ".st-key-profile_edit_trigger button:hover { color: var(--accent) !important; text-decoration-color: var(--accent) !important; }"
         "</style>",
         unsafe_allow_html=True,
     )
     with st.container(key="sidebar_profile"):
+        # Name is stored in Firestore (storage.get_user_name/set_user_name) so
+        # each deploy remembers its own name instead of the old hardcoded
+        # USER_NAME. Cached in session_state to avoid a Firestore read on every
+        # rerun. The actual name entry/editing happens in a POPUP dialog
+        # (name_dialog(), defined above) - on first run (no name saved yet) the
+        # popup opens automatically; later the "Edit" link reopens it.
+        if "user_name" not in st.session_state:
+            try:
+                st.session_state.user_name = storage.get_user_name()
+            except Exception:
+                st.session_state.user_name = ""
+        user_name = st.session_state.user_name
+
+        # First launch with no saved name -> open the popup automatically.
+        if not user_name and not st.session_state.get("show_name_dialog"):
+            st.session_state.show_name_dialog = True
+
         st.markdown(
             '<div class="sidebar-profile">'
-            f'<div class="sidebar-profile-avatar">{_initials(USER_NAME)}</div>'
+            f'<div class="sidebar-profile-avatar">{_initials(user_name or "?")}</div>'
             '<div class="sidebar-profile-text">'
-            f'<div class="sidebar-profile-name" title="{USER_NAME}">{USER_NAME}</div>'
-            '<div class="sidebar-profile-sub">View Profile</div>'
+            f'<div class="sidebar-profile-name" title="{user_name}">{user_name or "Set your name"}</div>'
             "</div></div>",
             unsafe_allow_html=True,
         )
+        with st.container(key="profile_edit_trigger"):
+            if st.button("✏️ Edit", key="profile_name_edit_btn"):
+                st.session_state.show_name_dialog = True
+                st.rerun()
+
+    # Open the popup if flagged (first run, or Edit clicked). Defined as a
+    # module-level @st.dialog function; calling it renders the modal.
+    if st.session_state.get("show_name_dialog"):
+        name_dialog()
 
 page = st.session_state.page
 st.session_state.setdefault("fs_chart", None)
@@ -886,7 +954,8 @@ EXAMPLE_HI = "मैकडॉनल्ड्स में पांच सौ �
 if page == "Dashboard":
     hour = datetime.datetime.now().hour
     greeting = "Good morning" if hour < 12 else ("Good afternoon" if hour < 17 else "Good evening")
-    st.markdown(f'<div class="page-title">{greeting}, {USER_NAME} 👋</div>', unsafe_allow_html=True)
+    _greet_name = st.session_state.get("user_name") or "there"
+    st.markdown(f'<div class="page-title">{greeting}, {_greet_name} 👋</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">Here\'s your financial overview</div>', unsafe_allow_html=True)
 
     # Some controls live at the bottom of the page but act on the top of it.
